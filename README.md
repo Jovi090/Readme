@@ -1,4 +1,139 @@
+package simplex.bn25.zhao335952.trading.controller;
 
+import simplex.bn25.zhao335952.trading.model.Trade;
+import simplex.bn25.zhao335952.trading.model.repository.StockRepository;
+import simplex.bn25.zhao335952.trading.model.repository.TradeRepository;
+import simplex.bn25.zhao335952.trading.view.PositionView;
+import simplex.bn25.zhao335952.trading.view.TradeView;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+import java.time.format.DateTimeFormatter;
+import java.util.*;
+
+public class TradeController {
+    private final TradeRepository tradeRepository;
+    private final StockRepository stockRepository;
+    private final TradeView tradeView;
+    private final PositionView positionView;
+
+    // 用于共享的预计算数据
+    private final Map<String, Integer> holdings = new HashMap<>(); // 每只股票的持仓量
+    private final Map<String, LocalDateTime> latestTradeTimes = new HashMap<>(); // 每只股票的最晚交易时间
+
+    private static final DateTimeFormatter DATETIME_FORMATTER = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+
+    public TradeController(TradeRepository tradeRepository, StockRepository stockRepository, TradeView tradeView, PositionView positionView) {
+        this.tradeRepository = tradeRepository;
+        this.stockRepository = stockRepository;
+        this.tradeView = tradeView;
+        this.positionView = positionView;
+
+        // 初始化共享数据
+        updateSharedData();
+    }
+
+    /**
+     * 功能3：录入交易
+     */
+    public void recordNewTrade() {
+        System.out.print("取引日時を入力してください (yyyy-MM-dd HH:mm): ");
+        LocalDateTime tradedDatetime = LocalDateTime.parse(scanner.nextLine().trim(), DATETIME_FORMATTER);
+
+        System.out.print("銘柄コードを入力してください (4桁の半角英数字): ");
+        String ticker = scanner.nextLine().trim();
+
+        if (!tradeRepository.isTickerRegistered(ticker)) {
+            System.out.println("登録されているいない銘柄コードです。再度入力してください。");
+            return;
+        }
+
+        // 利用功能5的最晚交易时间判断
+        if (!isTradeDatetimeValid(ticker, tradedDatetime)) {
+            System.out.println("取引日時は既存の最遅取引日時より後である必要があります。");
+            return;
+        }
+
+        System.out.print("売買区分を入力してください (Buy/Sell): ");
+        String side = scanner.nextLine().trim();
+
+        System.out.print("数量を入力してください (100株単位): ");
+        int quantity = Integer.parseInt(scanner.nextLine().trim());
+
+        // 利用功能5的持仓量判断
+        if (!isQuantityValidAfterTrade(ticker, side, quantity)) {
+            System.out.println("保有数量がマイナスになるため、この取引は無効です。");
+            return;
+        }
+
+        System.out.print("取引単価を入力してください (小数点以下2桁まで): ");
+        BigDecimal tradedUnitPrice = new BigDecimal(scanner.nextLine().trim());
+
+        LocalDateTime inputDatetime = LocalDateTime.now();
+
+        Trade trade = new Trade(tradedDatetime, ticker, side, quantity, tradedUnitPrice, inputDatetime);
+
+        if (tradeRepository.saveTrade(trade)) {
+            // 录入成功后更新共享数据
+            updateSharedData();
+            tradeView.showTradeAddedMessage(ticker);
+        } else {
+            System.out.println("データの書き込みにエラーが発生しました。");
+        }
+    }
+
+    /**
+     * 功能5：显示持仓数据
+     */
+    public void displayHoldings() {
+        // 使用功能5共享数据（持仓量和股票名称）
+        positionView.displayHoldings(holdings, stockRepository);
+    }
+
+    /**
+     * 更新共享数据（持仓量和最晚交易时间）
+     */
+    private void updateSharedData() {
+        holdings.clear();
+        latestTradeTimes.clear();
+
+        List<Trade> trades = tradeRepository.getAllTrades();
+
+        // 计算每只股票的持仓量和最晚交易时间
+        for (Trade trade : trades) {
+            // 更新持仓量
+            int quantity = trade.getQuantity();
+            if ("Sell".equalsIgnoreCase(trade.getSide())) {
+                quantity = -quantity; // 卖出为负数
+            }
+            holdings.merge(trade.getTicker(), quantity, Integer::sum);
+
+            // 更新最晚交易时间
+            latestTradeTimes.merge(
+                trade.getTicker(),
+                trade.getTradedDatetime(),
+                (oldTime, newTime) -> newTime.isAfter(oldTime) ? newTime : oldTime
+            );
+        }
+    }
+
+    /**
+     * 判断交易时间是否合法
+     */
+    private boolean isTradeDatetimeValid(String ticker, LocalDateTime tradedDatetime) {
+        LocalDateTime latestDatetime = latestTradeTimes.getOrDefault(ticker, LocalDateTime.MIN);
+        return tradedDatetime.isAfter(latestDatetime); // 新交易时间必须晚于最晚时间
+    }
+
+    /**
+     * 判断交易后持仓是否为负
+     */
+    private boolean isQuantityValidAfterTrade(String ticker, String side, int quantity) {
+        int currentQuantity = holdings.getOrDefault(ticker, 0);
+        int newQuantity = currentQuantity + ("Sell".equalsIgnoreCase(side) ? -quantity : quantity);
+        return newQuantity >= 0;
+    }
+}
 import java.util.*;
 
 public void displayHoldings() {
