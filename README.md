@@ -1,4 +1,64 @@
-以下是功能5（保有ポジション表示）相关的所有必须代码的整合，并附上每个部分的说明。
+package simplex.bn25.zhao335952.trading.model;
+
+public class Trade {
+    private String side;
+
+    public String getSide() {
+        return side;
+    }
+
+    public void setSide(String side) {
+        this.side = side;
+    }
+
+    public Side getSideAsEnum() {
+        return Side.fromString(side); // 转换为 Side 枚举
+    }
+}
+
+
+package simplex.bn25.zhao335952.trading.view;
+
+import simplex.bn25.zhao335952.trading.model.Trade;
+import simplex.bn25.zhao335952.trading.model.repository.StockRepository;
+
+import java.util.List;
+
+public class TradeView {
+    public TradeView() {
+        // 无需依赖注入 StockRepository
+    }
+
+    public void displayTradeList(List<Trade> trades, StockRepository stockRepository) {
+        if (trades.isEmpty()) {
+            System.out.println("取引データが見つかりません。CSVファイルを確認してください。");
+        } else {
+            System.out.println("-------------------------------------------------------------------------------");
+            System.out.printf("| %-19s | %-6s | %-30s | %-4s | %10s | %10s |%n",
+                    "Datetime", "Ticker", "Product Name", "Side", "Quantity", "Unit Price");
+            System.out.println("-------------------------------------------------------------------------------");
+            for (Trade trade : trades) {
+                String productName = stockRepository.getTickerNameByTicker(trade.getTicker());
+                displayTrade(trade, productName);
+            }
+            System.out.println("-------------------------------------------------------------------------------");
+        }
+    }
+
+    private void displayTrade(Trade trade, String productName) {
+        System.out.printf("| %-19s | %-6s | %-30s | %-4s | %10d | %10.2f |%n",
+                trade.getTradedDatetime().format(Trade.DATETIME_FORMATTER),
+                trade.getTicker().toUpperCase(),
+                productName,
+                trade.getSide(),
+                trade.getQuantity(),
+                trade.getTradedUnitPrice());
+    }
+
+    public void showTradeAddedMessage(String ticker) {
+        System.out.println("取引データを新規登録しました。" + ticker);
+    }
+}下是功能5（保有ポジション表示）相关的所有必须代码的整合，并附上每个部分的说明。
 1. TradeController 中的 displayHoldings 方法
 说明：
 读取 Trade.csv 获取交易记录，计算每只股票的持仓量。
