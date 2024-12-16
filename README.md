@@ -1,4 +1,34 @@
-package simplex.bn25.zhao335952.trading.model;
+import java.util.*;
+
+public void displayHoldings() {
+    List<Trade> trades = tradeRepository.getAllTrades();
+    Map<String, Integer> holdings = new HashMap<>(); // 使用 HashMap 存储无序数据
+
+    // 计算每只股票的持仓量
+    for (Trade trade : trades) {
+        int quantity = trade.getQuantity();
+        if ("Sell".equalsIgnoreCase(trade.getSide())) {
+            quantity = -quantity; // 卖出为负数
+        }
+        holdings.merge(trade.getTicker(), quantity, Integer::sum);
+    }
+
+    // 将 HashMap 转换为 List 并排序
+    List<Map.Entry<String, Integer>> sortedHoldings = new ArrayList<>(holdings.entrySet());
+    sortedHoldings.sort(Map.Entry.comparingByKey()); // 按股票代码升序排序
+
+    // 获取股票名称并保持与排序结果一致
+    List<String[]> displayData = new ArrayList<>();
+    for (Map.Entry<String, Integer> entry : sortedHoldings) {
+        String ticker = entry.getKey();
+        int quantity = entry.getValue();
+        String productName = stockRepository.getTickerNameByTicker(ticker);
+        displayData.add(new String[]{ticker, productName, String.valueOf(quantity)});
+    }
+
+    // 调用 View 显示数据
+    positionView.displayHoldings(displayData);
+}package simplex.bn25.zhao335952.trading.model;
 
 public class Trade {
     private String side;
