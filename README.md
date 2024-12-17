@@ -1,3 +1,122 @@
+以下是完整的 CalculatePosition 类，用来计算股票的 保有数量、平均取得单价、实现损益 和 未实现损益（评价損益）。
+package simplex.bn25.zhao335952.trading.utils;
+
+import simplex.bn25.zhao335952.trading.model.Trade;
+import simplex.bn25.zhao335952.trading.model.repository.TradeRepository;
+import simplex.bn25.zhao335952.trading.model.repository.StockRepository;
+
+import java.math.BigDecimal;
+import java.math.RoundingMode;
+import java.util.HashMap;
+import java.util.List;
+import java.util.Map;
+
+/**
+ * 计算股票的保有数量、平均取得单价、实现损益、市场价值和未实现损益的类。
+ */
+public class CalculatePosition {
+    private final TradeRepository tradeRepository;  // 交易数据仓库
+    private final StockRepository stockRepository; // 股票数据仓库
+    private final Map<String, PositionData> positionDataMap; // 每只股票的计算结果
+
+    public CalculatePosition(TradeRepository tradeRepository, StockRepository stockRepository) {
+        this.tradeRepository = tradeRepository;
+        this.stockRepository = stockRepository;
+        this.positionDataMap = new HashMap<>();
+    }
+
+    /**
+     * 计算股票的保有信息，包括：
+     * - 保有数量（holdingQuantity）
+     * - 平均取得单价（averageUnitPrice）
+     * - 实现损益（realizedPnL）
+     * - 市场价值（marketValue）
+     * - 未实现损益（unrealizedPnL）
+     */
+    public void calculatePositions() {
+        positionDataMap.clear(); // 清空之前的计算结果
+
+        List<Trade> trades = tradeRepository.getAllTrades(); // 获取所有交易记录
+
+        // 遍历每一条交易记录
+        for (Trade trade : trades) {
+            String ticker = trade.getTicker(); // 股票代码
+            BigDecimal unitPrice = trade.getTradedUnitPrice(); // 交易单价
+            int quantity = trade.getQuantity(); // 交易数量
+            boolean isSell = "Sell".equalsIgnoreCase(trade.getSide()); // 判断交易类型
+
+            // 如果不存在该股票的记录，则初始化
+            if (!positionDataMap.containsKey(ticker)) {
+                positionDataMap.put(ticker, new PositionData());
+            }
+
+            // 获取该股票的当前保有信息
+            PositionData position = positionDataMap.get(ticker);
+
+            if (isSell) {
+                // 处理卖出交易
+                int sellQuantity = quantity;
+
+                // 计算实现损益： (卖出价格 - 平均取得单价) * 卖出数量
+                BigDecimal realizedPnL = unitPrice.subtract(position.averageUnitPrice)
+                        .multiply(BigDecimal.valueOf(sellQuantity));
+                position.realizedPnL = position.realizedPnL.add(realizedPnL);
+
+                // 更新保有数量
+                position.holdingQuantity -= sellQuantity;
+            } else {
+                // 处理买入交易
+                BigDecimal totalCost = position.averageUnitPrice
+                        .multiply(BigDecimal.valueOf(position.holdingQuantity))
+                        .add(unitPrice.multiply(BigDecimal.valueOf(quantity)));
+
+                // 更新保有数量
+                position.holdingQuantity += quantity;
+
+                // 计算新的平均取得单价： 总成本 / 总数量
+                position.averageUnitPrice = totalCost.divide(
+                        BigDecimal.valueOf(position.holdingQuantity), 2, RoundingMode.HALF_UP);
+            }
+        }
+
+        // 计算市场价值和未实现损益
+        for (Map.Entry<String, PositionData> entry : positionDataMap.entrySet()) {
+            String ticker = entry.getKey();
+            PositionData position = entry.getValue();
+
+            // 获取股票的市场价格（实时价格）
+            BigDecimal marketPrice = stockRepository.getMarketPriceByTicker(ticker);
+
+            // 市场价值 = 当前保有数量 * 市场价格
+            position.marketValue = marketPrice.multiply(BigDecimal.valueOf(position.holdingQuantity));
+
+            // 未实现损益 = 市场价值 - (平均取得单价 * 保有数量)
+            BigDecimal totalCost = position.averageUnitPrice
+                    .multiply(BigDecimal.valueOf(position.holdingQuantity));
+            position.unrealizedPnL = position.marketValue.subtract(totalCost);
+        }
+    }
+
+    /**
+     * 获取所有股票的保有信息计算结果。
+     */
+    public Map<String, PositionData> getPositionData() {
+        return positionDataMap;
+    }
+
+    /**
+     * 内部类：用于存储每只股票的保有信息。
+     */
+    public static class PositionData {
+        public int holdingQuantity = 0; // 保有数量
+        public BigDecimal averageUnitPrice = BigDecimal.ZERO; // 平均取得单价
+        public BigDecimal realizedPnL = BigDecimal.ZERO; // 实现损益
+        public BigDecimal marketValue = BigDecimal.ZERO; // 市场价值
+        public BigDecimal unrealizedPnL = BigDecimal.ZERO; // 未实现损益
+    }
+}
+
+
 private boolean isQuantityValidAfterTrade(String ticker, String side, int quantity) {
     int currentQuantity = holdings.getOrDefault(ticker, 0);
     int delta; // 表示数量的增减变化
@@ -34,6 +153,51 @@ private void updateSharedData() {
             latestTradeTimes.put(trade.getTicker(), trade.getTradedDatetime());
         }
     }
+}
+2. 更新 PositionView 类
+
+PositionView 负责显示保有信息，包括保有数量、平均取得单价、实现損益和评价損益。
+
+package simplex.bn25.zhao335952.trading.view;
+
+import simplex.bn25.zhao335952.trading.utils.CalculatePosition.PositionData;
+import simplex.bn25.zhao335952.trading.model.repository.StockRepository;
+
+import java.util.List;
+
+public class PositionView {
+
+    public void displayPositions(List<PositionData> positionDataList, StockRepository stockRepository) {
+        System.out.println("-------------------------------------------------------------------------------");
+        System.out.printf("| %-6s | %-30s | %10s | %15s | %15s |\n",
+                "Ticker", "Product Name", "Quantity", "Avg Price", "Realized PnL");
+        System.out.println("-------------------------------------------------------------------------------");
+
+        for (PositionData data : positionDataList) {
+            String ticker = data.ticker;
+            String productName = stockRepository.getTickerNameByTicker(ticker);
+            System.out.printf("| %-6s | %-30s | %10d | %15.2f | %15.2f |\n",
+                    ticker,
+                    productName,
+                    data.holdingQuantity,
+                    data.averageUnitPrice,
+                    data.realizedPnL);
+        }
+
+        System.out.println("-------------------------------------------------------------------------------");
+    }
+}
+
+
+3. 在 TradeController 中调用
+
+在 TradeController 中添加对 CalculatePosition 和 PositionView 的调用：
+
+public void displayPositions() {
+    CalculatePosition calculatePosition = new CalculatePosition(tradeRepository, stockRepository);
+    calculatePosition.calculatePositions();
+    List<CalculatePosition.PositionData> positionData = calculatePosition.getPositionData();
+    positionView.displayPositions(positionData, stockRepository);
 }
 
 
