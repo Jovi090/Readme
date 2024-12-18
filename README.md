@@ -194,6 +194,7 @@ public class TradeController {
 
 新建MarketPriceRepository移除MarketPriceGenerator
 负责管理市场价格。
+// 新建 MarketPriceRepository 类
 package simplex.bn25.zhao335952.trading.repository;
 
 import java.io.BufferedReader;
@@ -216,6 +217,10 @@ public class MarketPriceRepository {
         return marketPrices.getOrDefault(ticker, BigDecimal.ZERO);
     }
 
+    public void updateMarketPrice(String ticker, BigDecimal marketPrice) {
+        marketPrices.put(ticker, marketPrice);
+    }
+
     private void loadMarketPrices() {
         try (BufferedReader br = new BufferedReader(new FileReader(csvFilePath))) {
             String line;
@@ -234,6 +239,7 @@ public class MarketPriceRepository {
         }
     }
 }
+
 
 
 
