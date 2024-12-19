@@ -1,3 +1,79 @@
+// 修改后的 Position 类
+package simplex.bn25.zhao335952.trading.model;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+
+public class Position {
+    private int quantity; // 持有数量
+    private BigDecimal averageUnitPrice; // 平均取得单价
+    private LocalDateTime latestTradeTime; // 最新交易时间
+    private BigDecimal realizedPnL; // 实现损益
+    private BigDecimal valuation; // 估值
+    private BigDecimal unrealizedPnL; // 未实现损益
+
+    public Position() {
+        this.quantity = 0;
+        this.averageUnitPrice = BigDecimal.ZERO;
+        this.latestTradeTime = null;
+        this.realizedPnL = BigDecimal.ZERO;
+        this.valuation = BigDecimal.ZERO;
+        this.unrealizedPnL = BigDecimal.ZERO;
+    }
+
+    public int getQuantity() {
+        return quantity;
+    }
+
+    public void updateQuantity(int deltaQuantity, BigDecimal tradePrice, Side side) {
+        if (side == Side.BUY) { // 买入更新平均取得单价
+            BigDecimal totalCost = averageUnitPrice.multiply(BigDecimal.valueOf(quantity))
+                    .add(tradePrice.multiply(BigDecimal.valueOf(deltaQuantity)));
+            quantity += deltaQuantity;
+            averageUnitPrice = totalCost.divide(BigDecimal.valueOf(quantity), 2, BigDecimal.ROUND_HALF_UP);
+        } else if (side == Side.SELL) { // 卖出更新实现损益
+            realizedPnL = realizedPnL.add(tradePrice.subtract(averageUnitPrice).multiply(BigDecimal.valueOf(deltaQuantity)));
+            quantity -= deltaQuantity;
+        }
+
+        // 保有数量为0时，平均取得单价为0
+        if (quantity == 0) {
+            averageUnitPrice = BigDecimal.ZERO;
+        }
+    }
+
+    public BigDecimal getAverageUnitPrice() {
+        return averageUnitPrice;
+    }
+
+    public LocalDateTime getLatestTradeTime() {
+        return latestTradeTime;
+    }
+
+    public void setLatestTradeTime(LocalDateTime latestTradeTime) {
+        this.latestTradeTime = latestTradeTime;
+    }
+
+    public BigDecimal getRealizedPnL() {
+        return realizedPnL;
+    }
+
+    public void calculateValuation(BigDecimal marketPrice) {
+        // 估值用保有数量 × 时价
+        this.valuation = marketPrice.multiply(BigDecimal.valueOf(quantity)).abs(); // 确保为正数
+        this.unrealizedPnL = valuation.subtract(averageUnitPrice.multiply(BigDecimal.valueOf(quantity)));
+    }
+
+    public BigDecimal getValuation() {
+        return valuation;
+    }
+
+    public BigDecimal getUnrealizedPnL() {
+        return unrealizedPnL;
+    }
+}
+
+
 private boolean isTradeTimeValid(String ticker, LocalDateTime tradedDatetime) {
     Position position = positions.get(ticker);
     if (position == null || position.getLatestTradeTime() == null) {
