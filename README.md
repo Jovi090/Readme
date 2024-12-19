@@ -1,3 +1,84 @@
+package simplex.bn25.zhao335952.trading.repository;
+
+import java.io.BufferedReader;
+import java.io.FileReader;
+import java.io.IOException;
+import java.math.BigDecimal;
+import java.util.HashMap;
+import java.util.Map;
+
+public class MarketPriceRepository {
+    private final Map<String, BigDecimal> marketPrices = new HashMap<>();
+    private final String csvFilePath;
+
+    public MarketPriceRepository(String csvFilePath) {
+        this.csvFilePath = csvFilePath;
+        loadMarketPrices();
+    }
+
+    public BigDecimal getMarketPrice(String ticker) {
+        // 如果不存在该股票代码或对应价格为 null，则返回 null
+        return marketPrices.getOrDefault(ticker, null);
+    }
+
+    public void updateMarketPrice(String ticker, BigDecimal marketPrice) {
+        marketPrices.put(ticker, marketPrice);
+    }
+
+    private void loadMarketPrices() {
+        try (BufferedReader br = new BufferedReader(new FileReader(csvFilePath))) {
+            String line;
+            br.readLine(); // Skip header
+            while ((line = br.readLine()) != null) {
+                String[] parts = line.split(",");
+                if (parts.length == 2) {
+                    String ticker = parts[0].trim();
+                    String priceString = parts[1].trim();
+                    BigDecimal price = priceString.isEmpty() ? null : new BigDecimal(priceString);
+                    marketPrices.put(ticker, price);
+                }
+            }
+            System.out.println("市場価格データが正常にロードされました。");
+        } catch (IOException e) {
+            System.out.println("市場価格データのロード中にエラーが発生しました: " + e.getMessage());
+        }
+    }
+}
+public void displayHoldings(Map<String, Position> positions, StockRepository stockRepository) {
+    System.out.printf("%-10s %-15s %-10s %-15s %-15s %-15s %-15s\n",
+            "Ticker", "Product Name", "Quantity", "Avg Price",
+            "Valuation", "Unrealized PnL", "Realized PnL");
+
+    for (Map.Entry<String, Position> entry : positions.entrySet()) {
+        String ticker = entry.getKey();
+        Position position = entry.getValue();
+        String productName = stockRepository.getTickerNameByTicker(ticker);
+
+        String avgPrice = DECIMAL_FORMAT.format(position.getAverageUnitPrice());
+        String valuation = (position.getValuation() == null) ? "N/A" : DECIMAL_FORMAT.format(position.getValuation());
+        String unrealizedPnL = (position.getUnrealizedPnL() == null) ? "N/A" : DECIMAL_FORMAT.format(position.getUnrealizedPnL());
+
+        System.out.printf("%-10s %-15s %,10d %15s %15s %15s %15s\n",
+                ticker,
+                productName,
+                position.getQuantity(),
+                avgPrice,
+                valuation,
+                unrealizedPnL,
+                DECIMAL_FORMAT.format(position.getRealizedPnL()));
+    }
+}
+
+public void calculateValuation(BigDecimal marketPrice) {
+    if (marketPrice == null) {
+        this.valuation = null; // 无效时价，设为 null
+        this.unrealizedPnL = null;
+    } else {
+        this.valuation = marketPrice.multiply(BigDecimal.valueOf(quantity)).abs(); // 确保估值为正数
+        this.unrealizedPnL = valuation.subtract(averageUnitPrice.multiply(BigDecimal.valueOf(quantity)));
+    }
+}
+
 // 修改后的 PositionView 类
 package simplex.bn25.zhao335952.trading.view;
 
