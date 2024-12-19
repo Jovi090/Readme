@@ -1,3 +1,50 @@
+private void loadPositions() {
+    List<Trade> trades = tradeRepository.getAllTrades();
+    for (Trade trade : trades) {
+        String ticker = trade.getTicker();
+        Position position = positions.computeIfAbsent(ticker, k -> new Position());
+
+
+private boolean isTradeTimeValid(String ticker, LocalDateTime tradedDatetime) {
+    Position position = positions.get(ticker);
+    if (position == null || position.getLatestTradeTime() == null) {
+        // 如果没有持仓记录或最新交易时间为空，则时间有效
+        return true;
+    }
+
+    // 获取最新交易时间
+    LocalDateTime latestTradeTime = position.getLatestTradeTime();
+    return tradedDatetime.isAfter(latestTradeTime);
+}
+
+public void recordNewTrade(String ticker, Side side, int quantity, BigDecimal tradedUnitPrice, LocalDateTime tradedDatetime) {
+    if (!isTradeTimeValid(ticker, tradedDatetime)) {
+        System.out.println("エラー: 取引日時が最新の取引日時よりも前です。");
+        return;
+    }
+
+    // 添加新交易
+    Trade newTrade = new Trade(tradedDatetime, ticker, null, side.name(), quantity, tradedUnitPrice, LocalDateTime.now());
+    tradeRepository.saveTrade(newTrade);
+
+    // 更新 Position
+    Position position = positions.computeIfAbsent(ticker, k -> new Position());
+    position.updateQuantity(quantity, tradedUnitPrice, side);
+    position.setLatestTradeTime(tradedDatetime); // 立即更新 latestTradeTime
+
+    System.out.println("取引が正常に登録されました。");
+}
+
+        Side side = Side.valueOf(trade.getSide().toUpperCase());
+        position.updateQuantity(trade.getQuantity(), trade.getTradedUnitPrice(), side);
+
+        // 确保 latestTradeTime 正确初始化
+        if (position.getLatestTradeTime() == null || trade.getTradedDatetime().isAfter(position.getLatestTradeTime())) {
+            position.setLatestTradeTime(trade.getTradedDatetime());
+        }
+    }
+}
+
 package simplex.bn25.zhao335952.trading.repository;
 
 import java.io.BufferedReader;
