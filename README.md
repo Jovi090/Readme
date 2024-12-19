@@ -1,3 +1,32 @@
+private boolean isTradeTimeValid(String ticker, LocalDateTime tradedDatetime) {
+    Position position = positions.get(ticker);
+    if (position == null || position.getLatestTradeTime() == null) {
+        // 如果没有持仓记录，交易时间有效
+        return true;
+    }
+    return tradedDatetime.isAfter(position.getLatestTradeTime());
+}
+
+private boolean isQuantityValidAfterTrade(String ticker, int quantity, Side side) {
+    if (side == Side.BUY) {
+        // 买入交易不需要检查数量
+        return true;
+    }
+
+    Position position = positions.get(ticker);
+    if (position == null || position.getQuantity() < quantity) {
+        // 如果没有持仓记录，或者卖出数量超过持仓数量
+        return false;
+    }
+
+    return true;
+}
+
+
+
+
+
+
 // 新建 Position 类
 package simplex.bn25.zhao335952.trading.model;
 
