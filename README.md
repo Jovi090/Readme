@@ -32,6 +32,41 @@ public class PositionView {
     }
 }
 
+
+package simplex.bn25.zhao335952.trading.view;
+
+import simplex.bn25.zhao335952.trading.model.Position;
+import simplex.bn25.zhao335952.trading.repository.StockRepository;
+
+import java.text.DecimalFormat;
+import java.util.Map;
+
+public class PositionView {
+
+    private static final DecimalFormat DECIMAL_FORMAT = new DecimalFormat("#,##0.00");
+
+    public void displayHoldings(Map<String, Position> positions, StockRepository stockRepository) {
+        System.out.printf("%-10s %-15s %-10s %-15s %-15s %-15s %-15s\n",
+                "Ticker", "Product Name", "Quantity", "Avg Price",
+                "Valuation", "Unrealized PnL", "Realized PnL");
+
+        for (Map.Entry<String, Position> entry : positions.entrySet()) {
+            String ticker = entry.getKey();
+            Position position = entry.getValue();
+            String productName = stockRepository.getTickerNameByTicker(ticker);
+
+            System.out.printf("%-10s %-15s %,10d %15s %15s %15s %15s\n",
+                    ticker,
+                    productName,
+                    position.getQuantity(),
+                    DECIMAL_FORMAT.format(position.getAverageUnitPrice()),
+                    DECIMAL_FORMAT.format(position.getValuation()),
+                    DECIMAL_FORMAT.format(position.getUnrealizedPnL()),
+                    DECIMAL_FORMAT.format(position.getRealizedPnL()));
+        }
+    }
+}
+
 // 修改后的 Position 类
 package simplex.bn25.zhao335952.trading.model;
 
