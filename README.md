@@ -1,4 +1,358 @@
+// FILE: TradeInputDto.java
+package simplex.bn25.zhao102015.server.controller;
 
+import jakarta.validation.constraints.*;
+import org.springframework.format.annotation.DateTimeFormat;
+import simplex.bn25.zhao102015.server.model.Side;
+
+import java.math.BigDecimal;
+import java.time.LocalDateTime;
+
+public class TradeInputDto {
+
+    @javax.validation.constraints.NotNull(message = "入力してください")
+    private java.time.LocalDate tradeDate;
+
+    @javax.validation.constraints.NotNull(message = "入力してください")
+    private String ticker;
+
+    @javax.validation.constraints.NotNull(message = "入力してください")
+    @javax.validation.constraints.Pattern(regexp = "Buy|Sell", message = "入力してください")
+    private String side;
+
+    @javax.validation.constraints.NotNull(message = "入力してください")
+    @javax.validation.constraints.Min(value = 100, message = "100単位で入力してください")
+    private Integer quantity;
+
+    @javax.validation.constraints.NotNull(message = "入力してください")
+    @javax.validation.constraints.DecimalMin(value = "0.01", message = "0より大きい金額を入力してください")
+    @javax.validation.constraints.Digits(integer = 10, fraction = 2, message = "小数点以下は2桁までです")
+    private java.math.BigDecimal price;
+
+    @NotNull
+    private Integer stockId;
+
+    private String ticker;
+    private String name;
+
+    @NotNull
+    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
+    private LocalDateTime tradedDatetime;
+
+    @NotNull
+    private Side side;
+
+    @NotNull
+    @Positive
+    private Long quantity;
+
+    @NotNull
+    @Digits(integer = 10, fraction = 2)
+    private BigDecimal tradedPrice;
+
+    public Integer getStockId() {
+        return stockId;
+    }
+
+    public void setStockId(Integer stockId) {
+        this.stockId = stockId;
+    }
+
+    public String getTicker() {
+        return ticker;
+    }
+
+    public void setTicker(String ticker) {
+        this.ticker = ticker;
+    }
+
+    public String getName() {
+        return name;
+    }
+
+    public void setName(String name) {
+        this.name = name;
+    }
+
+    public LocalDateTime getTradedDatetime() {
+        return tradedDatetime;
+    }
+
+    public void setTradedDatetime(LocalDateTime tradedDatetime) {
+        this.tradedDatetime = tradedDatetime;
+    }
+
+    public Side getSide() {
+        return side;
+    }
+
+    public void setSide(Side side) {
+        this.side = side;
+    }
+
+    public Long getQuantity() {
+        return quantity;
+    }
+
+    public void setQuantity(Long quantity) {
+        this.quantity = quantity;
+    }
+
+    public BigDecimal getTradedPrice() {
+        return tradedPrice;
+    }
+
+    public void setTradedPrice(BigDecimal tradedPrice) {
+        this.tradedPrice = tradedPrice;
+    }
+
+    public static TradeInputDto fromStock(simplex.bn25.zhao102015.server.model.Stock stock) {
+        TradeInputDto dto = new TradeInputDto();
+        dto.setStockId(stock.getId());
+        dto.setTicker(stock.getTicker());
+        dto.setName(stock.getName());
+        return dto;
+    }
+}
+
+
+// END OF FILE
+
+// FILE: TradeController.java
+package simplex.bn25.zhao102015.server.controller;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.validation.BindingResult;
+import org.springframework.validation.annotation.Validated;
+import org.springframework.web.bind.annotation.*;
+import simplex.bn25.zhao102015.server.controller.TradeInputDto;
+import simplex.bn25.zhao102015.server.model.Stock;
+import simplex.bn25.zhao102015.server.service.StockService;
+import simplex.bn25.zhao102015.server.service.TradeService;
+
+import java.util.List;
+
+@Controller
+@RequestMapping("/trade")
+public class TradeController {
+    private boolean validNavigation = false;
+
+    private boolean isWithinTradingHours() {
+        java.time.LocalTime now = java.time.LocalTime.now();
+        java.time.DayOfWeek day = java.time.LocalDate.now().getDayOfWeek();
+        return !day.equals(java.time.DayOfWeek.SATURDAY)
+            && !day.equals(java.time.DayOfWeek.SUNDAY)
+            && now.isAfter(java.time.LocalTime.of(9, 0))
+            && now.isBefore(java.time.LocalTime.of(15, 0));
+    }
+
+    private final TradeService tradeService;
+    private final StockService stockService;
+
+    @Autowired
+    public TradeController(TradeService tradeService, StockService stockService) {
+        this.tradeService = tradeService;
+        this.stockService = stockService;
+    }
+
+    @GetMapping
+    public String list(Model model) {
+        List<?> trades = tradeService.findAll();
+        model.addAttribute("trades", trades);
+        model.addAttribute("noData", trades.isEmpty());
+        return "trades/list";
+    }
+
+    @GetMapping("/new")
+    public String newTradeForm(@RequestParam("ticker") String ticker, Model model) {
+        Stock stock = stockService.findByTicker(ticker);
+        TradeInputDto dto = new TradeInputDto();
+        dto.setStockId(stock.getId());
+        dto.setTicker(stock.getTicker());
+        dto.setName(stock.getName());
+
+        model.addAttribute("input", dto);
+        return "trades/input";
+    }
+
+    @PostMapping("/new")
+    public String registerTrade(@Validated @ModelAttribute("input") TradeInputDto input,
+                                BindingResult bindingResult, Model model) {
+        if (bindingResult.hasErrors()) {
+            return "trades/input";
+        }
+
+        tradeService.register(input);
+        return "redirect:/trade";
+    }
+}
+
+
+// END OF FILE
+
+// FILE: TradeService.java
+package simplex.bn25.zhao102015.server.service;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import simplex.bn25.zhao102015.server.controller.TradeInputDto;
+import simplex.bn25.zhao102015.server.model.Trade;
+import simplex.bn25.zhao102015.server.model.repository.TradeRepository;
+
+import java.sql.Timestamp;
+import java.util.List;
+
+@Service
+public class TradeService {
+    @org.springframework.beans.factory.annotation.Autowired
+    private simplex.bn25.zhao102015.server.model.repository.StockRepository stockRepository;
+
+    public boolean validateTradeInput(String ticker, int quantity) {
+        return stockRepository.findById(ticker)
+                .map(stock -> stock.getSharedIssued() >= quantity && quantity % 100 == 0 && quantity > 0)
+                .orElse(false);
+    }
+
+    private final TradeRepository tradeRepository;
+
+    @Autowired
+    public TradeService(TradeRepository tradeRepository) {
+        this.tradeRepository = tradeRepository;
+    }
+
+    public List<Trade> findAll() {
+        return tradeRepository.findAll();
+    }
+
+    public void register(TradeInputDto input) {
+        Trade trade = new Trade();
+        trade.setStockId(input.getStockId());
+        trade.setTradedDatetime(Timestamp.valueOf(input.getTradedDatetime()));
+        trade.setSide(input.getSide());
+        trade.setQuantity(input.getQuantity());
+        trade.setTradedPrice(input.getTradedPrice());
+        tradeRepository.insert(trade);
+    }
+}
+
+
+// END OF FILE
+
+// FILE: input.html
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <title>Input Trade</title>
+</head>
+<body>
+<div>
+  <h2>Input Trade</h2>
+  <form novalidate method="post" th:action="@{/trade/new}" th:object="${input}">
+    <input style="margin-bottom: 15px;" type="hidden" th:field="*{stockId}"/>
+
+    <div>
+      <label for="ticker">Ticker</label>
+      <input style="margin-bottom: 15px;" type="text" id="ticker" th:value="${input.ticker}" disabled/>
+    </div>
+
+    <div>
+      <span th:text="${input.name}"></span>
+    </div>
+
+    <div>
+      <label for="tradedDatetime">Traded Datetime</label>
+      <input style="margin-bottom: 15px;" type="datetime-local" id="tradedDatetime" th:field="*{tradedDatetime}" required/>
+      <div th:if="${#fields.hasErrors('tradedDatetime')}" th:errors="*{tradedDatetime}" style="color:red"></div>
+    </div>
+
+    <div>
+      <label>Side</label>
+      <input style="margin-bottom: 15px;" type="radio" id="buy" th:field="*{side}" value="BUY"/> Buy
+      <input style="margin-bottom: 15px;" type="radio" id="sell" th:field="*{side}" value="SELL"/> Sell
+      <div th:if="${#fields.hasErrors('side')}" th:errors="*{side}" style="color:red"></div>
+    </div>
+
+    <div>
+      <label for="quantity">Quantity</label>
+      <input style="margin-bottom: 15px;" type="number" id="quantity" th:field="*{quantity}" min="1" step="100" required/>
+      <div th:if="${#fields.hasErrors('quantity')}" th:errors="*{quantity}" style="color:red"></div>
+    </div>
+
+    <div>
+      <label for="tradedPrice">Traded Price</label>
+      <input style="margin-bottom: 15px;" type="number" id="tradedPrice" th:field="*{tradedPrice}" step="0.01" required/>
+      <div th:if="${#fields.hasErrors('tradedPrice')}" th:errors="*{tradedPrice}" style="color:red"></div>
+    </div>
+
+    <div>
+      <input style="margin-bottom: 15px;" type="submit" value="Register"/>
+    </div>
+  </form>
+</div>
+</body>
+</html>
+
+// END OF FILE
+
+// FILE: list.html
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <title>Trade List</title>
+</head>
+<body>
+<div>
+  <h1>trading-app-v2 by zhao102015</h1>
+  <nav>
+    <ul>
+      <li><a href="/">Home</a></li>
+      <li><a href="/hello">Hello</a></li>
+      <li><a href="/stocks">Stocks</a></li>
+      <li><a href="/stocks/new">Create Stock</a></li>
+      <li><a href="/trade">Trade List</a></li>
+    </ul>
+  </nav>
+</div>
+<div>
+
+  <table>
+    <thead>
+    <tr>
+      <th style="text-align: left;">Traded Datetime</th>
+      <th style="text-align: left;">Ticker</th>
+      <th style="text-align: left;">Name</th>
+      <th style="text-align: left;">Side</th>
+      <th style="text-align: right;">Quantity</th>
+      <th style="text-align: right;">Traded Price</th>
+    </tr>
+    </thead>
+    <tbody>
+    <!-- 无数据时显示提示 -->
+    <tr th:if="${#lists.isEmpty(trades)}">
+      <td colspan="6" style="text-align: center;">データがありません。</td>
+    </tr>
+
+    <!-- 有数据时逐行渲染 -->
+    <tr th:each="trade : ${trades}" th:unless="${#lists.isEmpty(trades)}">
+      <td th:text="${#dates.format(trade.tradedDatetime, 'yyyy/MM/dd HH:mm')}"></td>
+      <td th:text="${trade.ticker}"></td>
+      <td th:text="${trade.name}"></td>
+      <td th:text="${trade.side == 'Buy' ? 'Buy' : 'Sell'}"></td>
+      <td th:text="${#numbers.formatInteger(trade.quantity, 0, 'COMMA')}" style="text-align: right;"></td>
+      <td th:text="${#numbers.formatDecimal(trade.tradedPrice, 1, 2)}" style="text-align: right;"></td>
+    </tr>
+    </tbody>
+  </table>
+</div>
+</body>
+</html>
+
+
+// END OF FILE
 
 ==== FILE: /main/java/simplex/bn25/zhao102015/server/ServerApplication.java ====
 
