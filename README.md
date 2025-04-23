@@ -1,3 +1,71 @@
+使用说明】
+
+1. Buy/Sell 显示首字母大写
+- 文件位置: templates/trades/list.html
+- 替换显示交易方向的<td>标签内容为：
+  <td th:text="${#strings.capitalize(trade.side.toLowerCase())}"></td>
+
+2. 防止用户直接访问 /trade/new，返回 404
+- 文件位置: TradeController.java
+- 在 import 区域添加：
+  import org.springframework.web.server.ResponseStatusException;
+  import org.springframework.http.HttpStatus;
+- 替换 /trade/new 的方法为：
+  @GetMapping("/trade/new")
+  public String newTrade(@RequestParam String ticker, Model model) {
+      if (!allowTradeInput) {
+          throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+      }
+      allowTradeInput = false;
+      model.addAttribute("tradeInputDto", new TradeInputDto());
+      model.addAttribute("ticker", ticker);
+      model.addAttribute("companyName", "会社名仮");
+      return "trades/input";
+  }
+
+3. 数量需为100的倍数
+- 文件位置: TradeService.java
+- 添加方法：
+  public boolean isValidQuantity(String ticker, int quantity) {
+      Integer sharedIssued = stockRepository.findSharedIssuedByTicker(ticker);
+      return sharedIssued != null && quantity > 0 && quantity % 100 == 0 && quantity <= sharedIssued;
+  }
+- 在 TradeController 的 create 方法中添加调用：
+  if (!tradeService.isValidQuantity(tradeInputDto.getTicker(), tradeInputDto.getQuantity())) {
+      bindingResult.rejectValue("quantity", "invalid", "100単位で発行済株式数以内で入力してください");
+  }
+
+【补丁代码】
+
+// PATCH: list.html - Buy/Sell 首字母大写
+<td th:text="${#strings.capitalize(trade.side.toLowerCase())}"></td>
+
+// PATCH: TradeController.java - 非跳转访问 /trade/new 返回 404
+import org.springframework.web.server.ResponseStatusException;
+import org.springframework.http.HttpStatus;
+
+@GetMapping("/trade/new")
+public String newTrade(@RequestParam String ticker, Model model) {
+    if (!allowTradeInput) {
+        throw new ResponseStatusException(HttpStatus.NOT_FOUND);
+    }
+    allowTradeInput = false;
+    model.addAttribute("tradeInputDto", new TradeInputDto());
+    model.addAttribute("ticker", ticker);
+    model.addAttribute("companyName", "会社名仮");
+    return "trades/input";
+}
+
+// PATCH: TradeService.java - 输入数量必须是100的倍数
+public boolean isValidQuantity(String ticker, int quantity) {
+    Integer sharedIssued = stockRepository.findSharedIssuedByTicker(ticker);
+    return sharedIssued != null && quantity > 0 && quantity % 100 == 0 && quantity <= sharedIssued;
+}
+
+
+
+
+
 // FILE: TradeInputDto.java
 package simplex.bn25.zhao102015.server.controller;
 
