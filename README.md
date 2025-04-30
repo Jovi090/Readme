@@ -1,3 +1,118 @@
+引入力バリデーション機能：保有株数チェック + 時系列チェック（注解方式）】
+
+目的：
+1. 買/売によって保有数がマイナスになる取引を禁止する
+2. 既存取引より未来の日時での新規登録を禁止する
+
+===========================================
+1. 创建注解 @ValidTradeInput
+===========================================
+路径：src/main/java/simplex/bn25/zhao102015/server/annotation/ValidTradeInput.java
+
+package simplex.bn25.zhao102015.server.annotation;
+
+import jakarta.validation.Constraint;
+import jakarta.validation.Payload;
+import java.lang.annotation.*;
+
+@Documented
+@Constraint(validatedBy = simplex.bn25.zhao102015.server.annotation.ValidTradeInputValidator.class)
+@Target({ ElementType.TYPE })
+@Retention(RetentionPolicy.RUNTIME)
+public @interface ValidTradeInput {
+    String message() default "無効な取引入力です";
+    Class<?>[] groups() default {};
+    Class<? extends Payload>[] payload() default {};
+}
+
+===========================================
+2. 创建校验器 ValidTradeInputValidator.java
+===========================================
+路径：src/main/java/simplex/bn25/zhao102015/server/annotation/ValidTradeInputValidator.java
+
+package simplex.bn25.zhao102015.server.annotation;
+
+import jakarta.validation.ConstraintValidator;
+import jakarta.validation.ConstraintValidatorContext;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Component;
+import simplex.bn25.zhao102015.server.controller.TradeInputDto;
+import simplex.bn25.zhao102015.server.model.Side;
+import simplex.bn25.zhao102015.server.model.Trade;
+import simplex.bn25.zhao102015.server.model.repository.TradeRepository;
+
+import java.util.List;
+
+@Component
+public class ValidTradeInputValidator implements ConstraintValidator<ValidTradeInput, TradeInputDto> {
+
+    @Autowired
+    private TradeRepository tradeRepository;
+
+    @Override
+    public boolean isValid(TradeInputDto input, ConstraintValidatorContext context) {
+        if (input.getStockId() == null || input.getTradedDatetime() == null || input.getQuantity() == null || input.getSide() == null) {
+            return true;
+        }
+
+        List<Trade> trades = tradeRepository.findAllByStockIdOrderByTradedDatetimeAsc(input.getStockId());
+
+        long currentHoldings = 0L;
+        for (Trade trade : trades) {
+            if (trade.getTradedDatetime().isAfter(input.getTradedDatetime())) break;
+            currentHoldings += trade.getSide() == Side.BUY ? trade.getQuantity() : -trade.getQuantity();
+        }
+
+        long delta = input.getSide() == Side.BUY ? input.getQuantity() : -input.getQuantity();
+        boolean validHoldings = (currentHoldings + delta) >= 0;
+
+        boolean validDatetime = trades.stream()
+            .noneMatch(t -> !t.getTradedDatetime().isBefore(input.getTradedDatetime()));
+
+        if (!validHoldings) {
+            context.disableDefaultConstraintViolation();
+            context.buildConstraintViolationWithTemplate("取引により保有数がマイナスになります")
+                   .addPropertyNode("quantity").addConstraintViolation();
+        }
+
+        if (!validDatetime) {
+            context.disableDefaultConstraintViolation();
+            context.buildConstraintViolationWithTemplate("既存取引より過去の日付を指定してください")
+                   .addPropertyNode("tradedDatetime").addConstraintViolation();
+        }
+
+        return validHoldings && validDatetime;
+    }
+}
+
+===========================================
+3. DTO 添加注解
+
+路径：src/main/java/simplex/bn25/zhao102015/server/controller/TradeInputDto.java
+
+@ValidTradeInput
+public class TradeInputDto {
+    ...
+}
+
+===========================================
+4. TradeRepository.java 追加方法
+
+public List<Trade> findAllByStockIdOrderByTradedDatetimeAsc(int stockId) {
+    String sql = "SELECT t.*, s.ticker, s.name FROM trade t JOIN stock s ON t.stock_id = s.id " +
+                 "WHERE t.stock_id = ? ORDER BY t.traded_datetime ASC";
+    return jdbcTemplate.query(sql, new TradeRowMapper(), stockId);
+}
+
+===========================================
+错误提示将会在：
+
+
+
+
+
+
+
 【交易录入功能增强：功能2（基于 Annotation 实现）】
 
 目的：防止用户录入的交易数量超过股票的発行済株式数（shares_issued）
