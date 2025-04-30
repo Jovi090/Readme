@@ -1,5 +1,91 @@
 交易录入功能增强：功能2 数量不能超过股票 shares_issued】
 
+此实现确保：用户录入交易时输入的数量不能超过该股票的「発行済株式数 shares_issued」
+
+==================================================
+1. StockService.java
+路径：src/main/java/simplex/bn25/zhao102015/server/service/StockService.java
+
+// 导入
+import simplex.bn25.zhao102015.server.model.Stock;
+import java.util.Optional;
+
+public class StockService {
+
+    private final StockRepository stockRepository;
+
+    public StockService(StockRepository stockRepository) {
+        this.stockRepository = stockRepository;
+    }
+
+    public Stock findById(Integer id) {
+        return stockRepository.findById(id)
+            .orElseThrow(() -> new IllegalArgumentException("指定された銘柄が見つかりません"));
+    }
+}
+
+==================================================
+2. StockRepository.java
+路径：src/main/java/simplex/bn25/zhao102015/server/model/repository/StockRepository.java
+
+// 导入
+import simplex.bn25.zhao102015.server.model.Stock;
+import java.util.Optional;
+
+public class StockRepository {
+
+    public Optional<Stock> findById(Integer id) {
+        String sql = "SELECT * FROM stock WHERE id = ?";
+        return jdbcTemplate.query(sql, new StockRowMapper(), id)
+                .stream().findFirst();
+    }
+}
+
+※ 确保 StockRowMapper 能正常 map shares_issued 字段：
+stock.setSharesIssued(rs.getLong("shares_issued"));
+
+==================================================
+3. TradeController.java
+路径：src/main/java/simplex/bn25/zhao102015/server/controller/TradeController.java
+
+@PostMapping("/new")
+public String create(@ModelAttribute("input") @Validated TradeInputDto input,
+                     BindingResult bindingResult,
+                     Model model) {
+
+    if (!bindingResult.hasErrors()) {
+        Stock stock = stockService.findById(input.getStockId());
+
+        if (input.getQuantity() > stock.getSharesIssued()) {
+            bindingResult.rejectValue("quantity", "quantity.tooLarge", "発行済株式数を超えています");
+        }
+    }
+
+    if (bindingResult.hasErrors()) {
+        return "trades/input";
+    }
+
+    tradeService.register(input);
+    return "redirect:/trade";
+}
+
+==================================================
+4. trades/input.html 表单页面
+
+确保包含隐藏字段提交 stockId：
+<input type="hidden" th:field="*{stockId}" />
+
+==================================================
+【小贴士】
+- Stock 实体中 sharesIssued 应为 Long 或 Integer 类型。
+- TradeInputDto 中 stockId 必须保留在表单中以便查询。
+- 异常处理可按需要补充 ResponseStatusException 做 404 显示。
+
+
+
+
+交易录入功能增强：功能2 数量不能超过股票 shares_issued】
+
 本说明文档涵盖如何实现以下功能：
 ▶ 在交易录入页面中，限制“数量”字段不能超过该股票的「発行済株式数 shares_issued」
 
