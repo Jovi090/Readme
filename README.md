@@ -1,3 +1,102 @@
+交易录入功能增强：数量验证逻辑】
+
+本说明文档涵盖以下两个功能的实现：
+
+1. 数量必须为100的倍数
+2. 数量不能超过该股票的发⾏済株式数 shares_issued
+
+========================================
+【功能1】数量必须为100的倍数
+========================================
+
+■ 实现方式：创建自定义注解 @MultipleOf100 + 校验器
+
+① 创建注解类 MultipleOf100.java
+
+位置建议：
+src/main/java/simplex/bn25/zhao102015/server/annotation/MultipleOf100.java
+
+内容：
+
+package simplex.bn25.zhao102015.server.annotation;
+
+import jakarta.validation.Constraint;
+import jakarta.validation.Payload;
+import java.lang.annotation.*;
+
+@Documented
+@Constraint(validatedBy = MultipleOf100Validator.class)
+@Target({ ElementType.FIELD })
+@Retention(RetentionPolicy.RUNTIME)
+public @interface MultipleOf100 {
+    String message() default "100の倍数で入力してください";
+    Class<?>[] groups() default {};
+    Class<? extends Payload>[] payload() default {};
+}
+
+② 创建验证器类 MultipleOf100Validator.java
+
+位置建议：
+src/main/java/simplex/bn25/zhao102015/server/annotation/MultipleOf100Validator.java
+
+内容：
+
+package simplex.bn25.zhao102015.server.annotation;
+
+import jakarta.validation.ConstraintValidator;
+import jakarta.validation.ConstraintValidatorContext;
+
+public class MultipleOf100Validator implements ConstraintValidator<MultipleOf100, Long> {
+    @Override
+    public boolean isValid(Long value, ConstraintValidatorContext context) {
+        return value != null && value % 100 == 0;
+    }
+}
+
+③ 应用注解到 TradeInputDto.java
+
+修改 quantity 字段：
+
+@NotNull
+@MultipleOf100
+private Long quantity;
+
+========================================
+【功能2】数量不能超过股票 shares_issued
+========================================
+
+■ 实现方式：在 TradeController 中手动校验并加入 BindingResult 错误提示
+
+① 修改 POST 接口 `/trade/new` 的处理方法：
+
+@PostMapping("/new")
+public String create(@ModelAttribute("input") @Validated TradeInputDto input,
+                     BindingResult bindingResult,
+                     Model model) {
+
+    if (!bindingResult.hasErrors()) {
+        Stock stock = stockService.findById(input.getStockId());
+        if (input.getQuantity() > stock.getSharesIssued()) {
+            bindingResult.rejectValue("quantity", "quantity.tooLarge", "発行済株式数を超えています");
+        }
+    }
+
+    if (bindingResult.hasErrors()) {
+        return "trades/input";
+    }
+
+    tradeService.register(input);
+    return "redirect:/trade";
+}
+
+■ 补充说明：
+- stockService.findById() 必须根据 stockId 返回该股票对象
+- shares_issued 在 Stock 实体类中应为 Long 或 Integer 类型
+
+========================================
+以上功能将增强交易录入表单的有效性和数据正确性。
+
+
 使用说明】
 
 1. Buy/Sell 显示首字母大写
