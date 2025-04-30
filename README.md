@@ -30,7 +30,10 @@ public class StockService {
 
 // 导入
 import simplex.bn25.zhao102015.server.model.Stock;
+import org.springframework.jdbc.core.RowMapper;
 import java.util.Optional;
+import java.sql.ResultSet;
+import java.sql.SQLException;
 
 public class StockRepository {
 
@@ -39,10 +42,22 @@ public class StockRepository {
         return jdbcTemplate.query(sql, new StockRowMapper(), id)
                 .stream().findFirst();
     }
-}
 
-※ 确保 StockRowMapper 能正常 map shares_issued 字段：
-stock.setSharesIssued(rs.getLong("shares_issued"));
+    // 新增 RowMapper
+    private static class StockRowMapper implements RowMapper<Stock> {
+        @Override
+        public Stock mapRow(ResultSet rs, int rowNum) throws SQLException {
+            Stock stock = new Stock();
+            stock.setId(rs.getInt("id"));
+            stock.setTicker(rs.getString("ticker"));
+            stock.setName(rs.getString("name"));
+            stock.setExchangeMarket(rs.getString("exchange_market"));
+            stock.setSharesIssued(rs.getLong("shares_issued"));
+            stock.setCreatedDatetime(rs.getTimestamp("created_datetime"));
+            return stock;
+        }
+    }
+}
 
 ==================================================
 3. TradeController.java
@@ -76,6 +91,16 @@ public String create(@ModelAttribute("input") @Validated TradeInputDto input,
 <input type="hidden" th:field="*{stockId}" />
 
 ==================================================
+【小贴士】
+- Stock 实体中 sharesIssued 应为 Long 或 Integer 类型。
+- TradeInputDto 中 stockId 必须保留在表单中以便查询。
+- 异常处理可按需要补充 ResponseStatusException 做 404 显示。
+
+
+
+
+
+
 【小贴士】
 - Stock 实体中 sharesIssued 应为 Long 或 Integer 类型。
 - TradeInputDto 中 stockId 必须保留在表单中以便查询。
