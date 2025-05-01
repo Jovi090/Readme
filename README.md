@@ -1,3 +1,141 @@
+HTML 表格更新：positions/list.html】
+<!-- templates/positions/list.html (更新后的 HTML 表格部分) -->
+<div>
+  <h2>Positions</h2>
+  <table border="1">
+    <thead>
+    <tr>
+      <th style="text-align: center;">Ticker</th>
+      <th style="text-align: center;">Name</th>
+      <th style="text-align: center;">Quantity</th>
+      <th style="text-align: center;">Average Unit Price</th>
+      <th style="text-align: center;">Realized Profit and Loss</th>
+      <th style="text-align: center;">Market Price</th>
+      <th style="text-align: center;">Valuation</th>
+      <th style="text-align: center;">Unrealized Profit and Loss</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr th:each="position : ${positions}">
+      <td style="text-align: left;" th:text="${position.ticker}"></td>
+      <td style="text-align: left;" th:text="${position.name}"></td>
+      <td style="text-align: right;" th:text="${position.quantity == 0 ? '0' : #numbers.formatInteger(position.quantity, 0, 'COMMA')}"></td>
+      <td style="text-align: right;" th:text="${position.quantity == 0 ? 'N/A' : #numbers.formatDecimal(position.avgUnitPrice, 1, 2)}"></td>
+      <td style="text-align: right;">
+        <span th:if="${position.quantity == 0}" th:text="'N/A'"></span>
+        <span th:if="${position.quantity != 0}" th:text="${#numbers.formatDecimal(position.realizedProfitLoss, 1, 2)}"
+              th:style="${position.realizedProfitLoss > 0 ? 'color:red' : (position.realizedProfitLoss < 0 ? 'color:green' : '')}"></span>
+      </td>
+      <td style="text-align: right;" th:text="${position.marketPrice == null ? 'N/A' : #numbers.formatDecimal(position.marketPrice, 1, 2)}"></td>
+      <td style="text-align: right;" th:text="${position.marketPrice == null ? 'N/A' : (position.quantity == 0 ? 'N/A' : #numbers.formatDecimal(position.valuation, 1, 2))}"
+          th:style="${position.valuation > 0 ? 'color:red' : (position.valuation == 0 ? '' : (position.valuation < 0 ? 'color:green' : ''))}"></td>
+      <td style="text-align: right;">
+        <span th:if="${position.unrealizedProfitLoss == null}" th:text="'N/A'"></span>
+        <span th:if="${position.unrealizedProfitLoss != null}" th:text="${#numbers.formatDecimal(position.unrealizedProfitLoss, 1, 2)}"
+              th:style="${position.unrealizedProfitLoss > 0 ? 'color:red' : (position.unrealizedProfitLoss < 0 ? 'color:green' : '')}"></span>
+      </td>
+    </tr>
+    </tbody>
+  </table>
+</div>
+
+【Validation 修复：ValidTradeInputValidator.java】
+// ValidTradeInputValidator.java (修复后的验证逻辑)
+@Override
+public boolean isValid(TradeInputDto input, ConstraintValidatorContext context) {
+    if (input.getStockId() == null || input.getTradedDatetime() == null ||
+        input.getQuantity() == null || input.getSide() == null) {
+        return true;
+    }
+
+    List<Trade> trades = tradeRepository.findAllByStockIdOrderByTradedDatetimeAsc(input.getStockId());
+    long currentHoldings = 0L;
+    for (Trade trade : trades) {
+        if (trade.getTradedDatetime().after(Timestamp.valueOf(input.getTradedDatetime()))) break;
+        currentHoldings += trade.getSide() == Side.BUY ? trade.getQuantity() : -trade.getQuantity();
+    }
+
+    long delta = input.getSide() == Side.BUY ? input.getQuantity() : -input.getQuantity();
+    boolean validHoldings = (currentHoldings + delta) >= 0;
+
+    boolean validDatetime = trades.isEmpty() ||
+            trades.getLast().getTradedDatetime().compareTo(Timestamp.valueOf(input.getTradedDatetime())) < 0;
+
+    if (!validHoldings) {
+        context.disableDefaultConstraintViolation();
+        context.buildConstraintViolationWithTemplate("取引後の保有数がマイナスになります。")
+                .addPropertyNode("quantity")
+                .addConstraintViolation();
+    }
+
+    if (!validDatetime) {
+        context.disableDefaultConstraintViolation();
+        context.buildConstraintViolationWithTemplate("既存の取引より前の日時は指定できません。")
+                .addPropertyNode("tradedDatetime")
+                .addConstraintViolation();
+    }
+
+    return validHoldings && validDatetime;
+}
+
+【Repository 修复：防止同一 Ticker 重复行显示】
+// PositionRepository.java - 修复重复 ticker 问题的 SQL
+
+public List<Position> findAll() {
+    String sql = """
+        SELECT s.ticker, s.name,
+               COALESCE(SUM(CASE WHEN t.side = 'BUY' THEN t.quantity
+                                 WHEN t.side = 'SELL' THEN -t.quantity END), 0) AS quantity,
+               CASE WHEN SUM(CASE WHEN t.side = 'BUY' THEN t.quantity ELSE 0 END) > 0
+                    THEN ROUND(SUM(CASE WHEN t.side = 'BUY' THEN t.traded_price * t.quantity ELSE 0 END)
+                             / NULLIF(SUM(CASE WHEN t.side = 'BUY' THEN t.quantity ELSE 0 END), 0), 2)
+                    ELSE NULL END AS avg_unit_price,
+               CASE WHEN SUM(CASE WHEN t.side = 'SELL' THEN t.quantity ELSE 0 END) > 0
+                    THEN ROUND(SUM(CASE WHEN t.side = 'SELL' THEN (t.traded_price - (
+                         SELECT ROUND(SUM(t2.traded_price * t2.quantity)::numeric / NULLIF(SUM(t2.quantity), 0), 2)
+                         FROM trade t2 WHERE t2.stock_id = s.id AND t2.side = 'BUY')) * t.quantity), 2)
+                    ELSE NULL END AS realized_pl,
+               mp.market_price,
+               CASE WHEN mp.market_price IS NOT NULL AND
+                         SUM(CASE WHEN t.side = 'BUY' THEN t.quantity ELSE 0 END)
+                       - SUM(CASE WHEN t.side = 'SELL' THEN t.quantity ELSE 0 END) > 0
+                    THEN ROUND(mp.market_price *
+                         (SUM(CASE WHEN t.side = 'BUY' THEN t.quantity ELSE 0 END)
+                        - SUM(CASE WHEN t.side = 'SELL' THEN t.quantity ELSE 0 END)), 2)
+                    ELSE NULL END AS valuation,
+               CASE WHEN mp.market_price IS NOT NULL AND
+                         SUM(CASE WHEN t.side = 'BUY' THEN t.quantity ELSE 0 END) > 0
+                    THEN ROUND((mp.market_price -
+                         (SUM(CASE WHEN t.side = 'BUY' THEN t.traded_price * t.quantity ELSE 0 END)
+                          / NULLIF(SUM(CASE WHEN t.side = 'BUY' THEN t.quantity ELSE 0 END), 0)))
+                          * (SUM(CASE WHEN t.side = 'BUY' THEN t.quantity ELSE 0 END)
+                           - SUM(CASE WHEN t.side = 'SELL' THEN t.quantity ELSE 0 END)), 2)
+                    ELSE NULL END AS unrealized_pl
+        FROM stock s
+        LEFT JOIN trade t ON t.stock_id = s.id
+        LEFT JOIN (
+            SELECT DISTINCT ON (stock_id) stock_id, market_price
+            FROM market_price
+            ORDER BY stock_id, created_datetime DESC
+        ) mp ON mp.stock_id = s.id
+        GROUP BY s.ticker, s.name, mp.market_price
+        ORDER BY s.ticker
+    """;
+
+    return jdbcTemplate.query(sql, (rs, i) -> mapRow(rs));
+}
+
+
+
+
+
+
+
+
+
+
+
+
 目的】
 追加「ポジション一覧画面」：路径 /positions
 显示当前持仓状况，包括评价损益，风格统一，基于数据库 SQL 聚合计算。
