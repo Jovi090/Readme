@@ -1,4 +1,199 @@
 目的】
+追加页面 /marketprice/bulk：支持用户以 CSV 格式批量录入 ticker + market price。
+如格式有误、重复、无效 ticker、空值等则提示错误；成功则跳转到 /positions。
+
+---
+
+【修改 1】新增 Controller
+文件位置建议：main/java/simplex/bn25/zhao102015/server/controller/MarketPriceController.java
+
+```java
+package simplex.bn25.zhao102015.server.controller;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Controller;
+import org.springframework.ui.Model;
+import org.springframework.web.bind.annotation.*;
+
+import simplex.bn25.zhao102015.server.service.MarketPriceService;
+
+@Controller
+@RequestMapping("/marketprice")
+public class MarketPriceController {
+
+    @Autowired
+    private MarketPriceService marketPriceService;
+
+    @GetMapping("/bulk")
+    public String showBulkForm(Model model) {
+        model.addAttribute("error", null);
+        return "marketprice/bulk";
+    }
+
+    @PostMapping("/bulk")
+    public String handleBulk(@RequestParam("csv") String csv, Model model) {
+        String error = marketPriceService.processBulkCsv(csv);
+        if (error != null) {
+            model.addAttribute("error", error);
+            model.addAttribute("csv", csv);
+            return "marketprice/bulk";
+        }
+        return "redirect:/positions";
+    }
+}
+```
+
+---
+
+【修改 2】新增 Service 类
+文件建议位置：main/java/simplex/bn25/zhao102015/server/service/MarketPriceService.java
+
+```java
+package simplex.bn25.zhao102015.server.service;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import simplex.bn25.zhao102015.server.model.repository.MarketPriceRepository;
+import simplex.bn25.zhao102015.server.model.repository.StockRepository;
+import simplex.bn25.zhao102015.server.model.Stock;
+
+import java.math.BigDecimal;
+import java.util.*;
+
+@Service
+public class MarketPriceService {
+
+    @Autowired
+    private MarketPriceRepository marketPriceRepository;
+
+    @Autowired
+    private StockRepository stockRepository;
+
+    public String processBulkCsv(String csv) {
+        if (csv == null || csv.isBlank()) return "入力は必須です。";
+
+        String[] lines = csv.split("\r?\n");
+        Set<String> seenTickers = new HashSet<>();
+
+        List<Object[]> entries = new ArrayList<>();
+
+        for (int i = 0; i < lines.length; i++) {
+            String line = lines[i].trim();
+            if (line.isEmpty()) return (i+1) + "行目：空行があります。";
+
+            String[] parts = line.split(",");
+            if (parts.length != 2) return (i+1) + "行目：列数が不正です。";
+
+            String ticker = parts[0].trim();
+            String priceStr = parts[1].trim();
+
+            if (ticker.isEmpty()) return (i+1) + "行目：tickerは必須です。";
+            if (seenTickers.contains(ticker)) return (i+1) + "行目：tickerが重複しています。";
+            seenTickers.add(ticker);
+
+            Stock stock = stockRepository.findByTicker(ticker).orElse(null);
+            if (stock == null) return (i+1) + "行目：ticker " + ticker + " は存在しません。";
+
+            BigDecimal price;
+            try {
+                price = new BigDecimal(priceStr);
+            } catch (NumberFormatException e) {
+                return (i+1) + "行目：金額が不正です。";
+            }
+
+            if (price.compareTo(BigDecimal.ZERO) < 0) return (i+1) + "行目：負の金額は不可です。";
+            if (price.scale() > 2) return (i+1) + "行目：小数点以下は2桁までです。";
+
+            entries.add(new Object[]{stock.getId(), price});
+        }
+
+        for (Object[] e : entries) {
+            marketPriceRepository.insert((Integer)e[0], (BigDecimal)e[1]);
+        }
+
+        return null; // success
+    }
+}
+```
+
+---
+
+【修改 3】新增 Repository 方法
+文件位置：main/java/simplex/bn25/zhao102015/server/model/repository/MarketPriceRepository.java
+
+```java
+package simplex.bn25.zhao102015.server.model.repository;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Repository;
+
+import java.math.BigDecimal;
+
+@Repository
+public class MarketPriceRepository {
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    public void insert(Integer stockId, BigDecimal price) {
+        jdbcTemplate.update(
+            "INSERT INTO market_price (stock_id, market_price) VALUES (?, ?)",
+            stockId, price
+        );
+    }
+}
+```
+
+---
+
+【修改 4】新增 HTML 页面
+文件路径：templates/marketprice/bulk.html
+
+```html
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <title>Market Price Register</title>
+</head>
+<body th:replace="~{layouts :: header}">
+<div>
+  <h2>Market Price 登録</h2>
+  <form method="post" th:action="@{/marketprice/bulk}">
+    <div>
+      <label for="csv">Market Price</label><br>
+      <textarea id="csv" name="csv" rows="10" cols="40" th:text="${csv}"></textarea>
+    </div>
+    <div>
+      <button type="submit">Register</button>
+    </div>
+    <div th:if="${error}" style="color:red;" th:text="${error}"></div>
+  </form>
+</div>
+</body>
+</html>
+```
+
+---
+
+【修改 5】layouts.html 导航追加入口
+找到模板 layouts.html 的导航部分，追加：
+
+```html
+<li><a href="/marketprice/bulk">MarketPrice Register</a></li>
+```
+
+---
+
+【完成】
+- 输入格式错误、ticker 重复、不存在时，红字提示；
+- 成功后跳转 /positions；
+- 输入区域使用 textarea；
+- 不需上传文件，仅复制粘贴 ticker,price 的格式。
+
+
+目的】
 为交易一览页面（/trade）追加筛选功能，不破坏已有功能与结构。
 功能包括按 Ticker 文字、交易日（全部 or 今日）筛选，并支持空白时显示全部。
 
