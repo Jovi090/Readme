@@ -1,11 +1,11 @@
 目的】
-追加页面 /marketprice/bulk：支持用户以 CSV 格式批量录入 ticker + market price。
-如格式有误、重复、无效 ticker、空值等则提示错误；成功则跳转到 /positions。
+追加「ポジション一覧画面」：路径 /positions
+显示当前持仓状况，包括评价损益，风格统一，基于数据库 SQL 聚合计算。
 
----
-
-【修改 1】新增 Controller
-文件位置建议：main/java/simplex/bn25/zhao102015/server/controller/MarketPriceController.java
+============================================================
+① PositionController.java
+路径：main/java/simplex/bn25/zhao102015/server/controller/PositionController.java
+============================================================
 
 ```java
 package simplex.bn25.zhao102015.server.controller;
@@ -13,10 +13,265 @@ package simplex.bn25.zhao102015.server.controller;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Controller;
 import org.springframework.ui.Model;
-import org.springframework.web.bind.annotation.*;
+import org.springframework.web.bind.annotation.GetMapping;
+import simplex.bn25.zhao102015.server.service.PositionService;
 
-import simplex.bn25.zhao102015.server.service.MarketPriceService;
+@Controller
+public class PositionController {
 
+    @Autowired
+    private PositionService positionService;
+
+    @GetMapping("/positions")
+    public String showPositions(Model model) {
+        model.addAttribute("positions", positionService.getAllPositions());
+        return "positions/list";
+    }
+}
+```
+
+============================================================
+② PositionService.java
+路径：main/java/simplex/bn25/zhao102015/server/service/PositionService.java
+============================================================
+
+```java
+package simplex.bn25.zhao102015.server.service;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import simplex.bn25.zhao102015.server.model.Position;
+import simplex.bn25.zhao102015.server.model.repository.PositionRepository;
+
+import java.util.List;
+
+@Service
+public class PositionService {
+
+    @Autowired
+    private PositionRepository positionRepository;
+
+    public List<Position> getAllPositions() {
+        return positionRepository.findAll();
+    }
+}
+```
+
+============================================================
+③ PositionRepository.java
+路径：main/java/simplex/bn25/zhao102015/server/model/repository/PositionRepository.java
+============================================================
+
+```java
+package simplex.bn25.zhao102015.server.model.repository;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.jdbc.core.JdbcTemplate;
+import org.springframework.stereotype.Repository;
+import simplex.bn25.zhao102015.server.model.Position;
+
+import java.sql.ResultSet;
+import java.sql.SQLException;
+import java.util.List;
+
+@Repository
+public class PositionRepository {
+
+    @Autowired
+    private JdbcTemplate jdbcTemplate;
+
+    public List<Position> findAll() {
+        String sql = """
+            SELECT s.ticker, s.name,
+                   COALESCE(SUM(CASE WHEN t.side = 'BUY' THEN t.quantity
+                                     WHEN t.side = 'SELL' THEN -t.quantity END), 0) AS quantity,
+                   CASE WHEN SUM(CASE WHEN t.side = 'BUY' THEN t.quantity ELSE 0 END) > 0
+                        THEN ROUND(SUM(CASE WHEN t.side = 'BUY' THEN t.traded_price * t.quantity ELSE 0 END)
+                                 / NULLIF(SUM(CASE WHEN t.side = 'BUY' THEN t.quantity ELSE 0 END), 0), 2)
+                        ELSE NULL END AS avg_unit_price,
+                   CASE WHEN SUM(CASE WHEN t.side = 'SELL' THEN t.quantity ELSE 0 END) > 0
+                        THEN ROUND(SUM(CASE WHEN t.side = 'SELL' THEN (t.traded_price -
+                             (SELECT ROUND(SUM(t2.traded_price * t2.quantity)::numeric / NULLIF(SUM(t2.quantity), 0), 2)
+                              FROM trade t2 WHERE t2.stock_id = s.id AND t2.side = 'BUY')) * t.quantity
+                            ELSE 0 END), 2)
+                        ELSE NULL END AS realized_pl,
+                   mp.market_price,
+                   CASE WHEN mp.market_price IS NOT NULL AND
+                             SUM(CASE WHEN t.side = 'BUY' THEN t.quantity ELSE 0 END)
+                           - SUM(CASE WHEN t.side = 'SELL' THEN t.quantity ELSE 0 END) > 0
+                        THEN ROUND(mp.market_price *
+                             (SUM(CASE WHEN t.side = 'BUY' THEN t.quantity ELSE 0 END)
+                            - SUM(CASE WHEN t.side = 'SELL' THEN t.quantity ELSE 0 END)), 2)
+                        ELSE NULL END AS valuation,
+                   CASE WHEN mp.market_price IS NOT NULL AND
+                             SUM(CASE WHEN t.side = 'BUY' THEN t.quantity ELSE 0 END) > 0
+                        THEN ROUND((mp.market_price -
+                             (SUM(CASE WHEN t.side = 'BUY' THEN t.traded_price * t.quantity ELSE 0 END)
+                              / NULLIF(SUM(CASE WHEN t.side = 'BUY' THEN t.quantity ELSE 0 END), 0)))
+                              * (SUM(CASE WHEN t.side = 'BUY' THEN t.quantity ELSE 0 END)
+                               - SUM(CASE WHEN t.side = 'SELL' THEN t.quantity ELSE 0 END)), 2)
+                        ELSE NULL END AS unrealized_pl
+            FROM stock s
+            LEFT JOIN trade t ON t.stock_id = s.id
+            LEFT JOIN market_price mp ON mp.stock_id = s.id
+            GROUP BY s.ticker, s.name, mp.market_price
+            ORDER BY s.ticker
+        """;
+
+        return jdbcTemplate.query(sql, (rs, i) -> mapRow(rs));
+    }
+
+    private Position mapRow(ResultSet rs) throws SQLException {
+        Position p = new Position();
+        p.setTicker(rs.getString("ticker"));
+        p.setName(rs.getString("name"));
+        p.setQuantity(rs.getLong("quantity"));
+        p.setAverageUnitPrice(rs.getBigDecimal("avg_unit_price"));
+        p.setRealizedPl(rs.getBigDecimal("realized_pl"));
+        p.setMarketPrice(rs.getBigDecimal("market_price"));
+        p.setValuation(rs.getBigDecimal("valuation"));
+        p.setUnrealizedPl(rs.getBigDecimal("unrealized_pl"));
+        return p;
+    }
+}
+```
+
+============================================================
+④ Position.java
+路径：main/java/simplex/bn25/zhao102015/server/model/Position.java
+============================================================
+
+```java
+package simplex.bn25.zhao102015.server.model;
+
+import java.math.BigDecimal;
+
+public class Position {
+    private String ticker;
+    private String name;
+    private long quantity;
+    private BigDecimal averageUnitPrice;
+    private BigDecimal realizedPl;
+    private BigDecimal marketPrice;
+    private BigDecimal valuation;
+    private BigDecimal unrealizedPl;
+
+    // Getters & Setters ...
+}
+```
+
+============================================================
+⑤ list.html
+路径：main/resources/templates/positions/list.html
+============================================================
+
+```html
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+  <meta charset="UTF-8">
+  <title>Positions</title>
+</head>
+<body th:replace="~{layouts :: header}">
+<div>
+  <h2>Positions</h2>
+  <table border="1">
+    <thead>
+    <tr>
+      <th style="text-align:center;">Ticker</th>
+      <th style="text-align:center;">Name</th>
+      <th style="text-align:right;">Quantity</th>
+      <th style="text-align:right;">Average Unit Price</th>
+      <th style="text-align:right;">Realized P/L</th>
+      <th style="text-align:right;">Market Price</th>
+      <th style="text-align:right;">Valuation</th>
+      <th style="text-align:right;">Unrealized P/L</th>
+    </tr>
+    </thead>
+    <tbody>
+    <tr th:each="pos : ${positions}">
+      <td th:text="${pos.ticker}"></td>
+      <td th:text="${pos.name}"></td>
+      <td th:text="${pos.quantity}"></td>
+      <td th:text="${pos.quantity == 0 ? 'N/A' : #numbers.formatDecimal(pos.averageUnitPrice, 1, 2)}"></td>
+      <td th:if="${pos.realizedPl == null}" th:text="'N/A'"></td>
+      <td th:if="${pos.realizedPl != null}" th:text="${#numbers.formatDecimal(pos.realizedPl, 1, 2)}"
+          th:style="${pos.realizedPl > 0 ? 'color:red' : (pos.realizedPl < 0 ? 'color:green' : '')}"></td>
+      <td th:text="${pos.marketPrice == null ? 'N/A' : #numbers.formatDecimal(pos.marketPrice, 1, 2)}"></td>
+      <td th:text="${pos.valuation == null ? 'N/A' : #numbers.formatDecimal(pos.valuation, 1, 2)}"
+          th:style="${pos.valuation > 0 ? 'color:red' : ''}"></td>
+      <td th:text="${pos.unrealizedPl == null ? 'N/A' : #numbers.formatDecimal(pos.unrealizedPl, 1, 2)}"
+          th:style="${pos.unrealizedPl > 0 ? 'color:red' : (pos.unrealizedPl < 0 ? 'color:green' : '')}"></td>
+    </tr>
+    </tbody>
+  </table>
+</div>
+</body>
+</html>
+```
+
+============================================================
+⑥ layouts.html 菜单追加
+============================================================
+```html
+<li><a href="/positions">Positions</a></li>
+```
+
+【完成】
+所有显示数据由 SQL 聚合实现，输出格式与颜色由 Thymeleaf 条件控制。
+
+
+
+
+目的】
+完整复现 Trade 输入验证功能② + Market Price 登録功能③
+适用于你当前已实装项目结构，内容按文件整理，确保可直接复现。
+
+============================================================
+① Trade 输入验证 - 追加 shares_issued 限制
+============================================================
+
+【1.1】修改类：ValidTradeInputValidator.java
+路径：main/java/simplex/bn25/zhao102015/server/annotation/ValidTradeInputValidator.java
+
+追加：
+@Autowired
+private StockRepository stockRepository;
+
+在 `isValid()` 方法中，保持已有 validHoldings 判定的基础下，在其后加入：
+
+```java
+if (input.getSide() == Side.BUY) {
+    Stock stock = stockRepository.findById(input.getStockId()).orElse(null);
+    if (stock != null) {
+        long totalBuy = trades.stream().filter(t -> t.getSide() == Side.BUY).mapToLong(Trade::getQuantity).sum();
+        long totalSell = trades.stream().filter(t -> t.getSide() == Side.SELL).mapToLong(Trade::getQuantity).sum();
+        long newTotal = totalBuy - totalSell + input.getQuantity();
+
+        if (newTotal > stock.getSharesIssued()) {
+            context.disableDefaultConstraintViolation();
+            context.buildConstraintViolationWithTemplate("発行済株式数を超える数量は登録できません。")
+                   .addPropertyNode("quantity")
+                   .addConstraintViolation();
+            return false;
+        }
+    }
+}
+```
+
+注意：
+- 不需创建新注解类；
+- 不影响现有验证；
+- 该逻辑仅对 BUY 侧有效。
+
+============================================================
+② Market Price Register 页面 - 批量 CSV 登录
+============================================================
+
+【2.1】创建 Controller：
+路径：main/java/simplex/bn25/zhao102015/server/controller/MarketPriceController.java
+
+```java
 @Controller
 @RequestMapping("/marketprice")
 public class MarketPriceController {
@@ -43,23 +298,10 @@ public class MarketPriceController {
 }
 ```
 
----
-
-【修改 2】新增 Service 类
-文件建议位置：main/java/simplex/bn25/zhao102015/server/service/MarketPriceService.java
+【2.2】创建 Service：
+路径：main/java/simplex/bn25/zhao102015/server/service/MarketPriceService.java
 
 ```java
-package simplex.bn25.zhao102015.server.service;
-
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-import simplex.bn25.zhao102015.server.model.repository.MarketPriceRepository;
-import simplex.bn25.zhao102015.server.model.repository.StockRepository;
-import simplex.bn25.zhao102015.server.model.Stock;
-
-import java.math.BigDecimal;
-import java.util.*;
-
 @Service
 public class MarketPriceService {
 
@@ -74,14 +316,10 @@ public class MarketPriceService {
 
         String[] lines = csv.split("\r?\n");
         Set<String> seenTickers = new HashSet<>();
-
         List<Object[]> entries = new ArrayList<>();
 
         for (int i = 0; i < lines.length; i++) {
-            String line = lines[i].trim();
-            if (line.isEmpty()) return (i+1) + "行目：空行があります。";
-
-            String[] parts = line.split(",");
+            String[] parts = lines[i].trim().split(",");
             if (parts.length != 2) return (i+1) + "行目：列数が不正です。";
 
             String ticker = parts[0].trim();
@@ -111,25 +349,15 @@ public class MarketPriceService {
             marketPriceRepository.insert((Integer)e[0], (BigDecimal)e[1]);
         }
 
-        return null; // success
+        return null;
     }
 }
 ```
 
----
-
-【修改 3】新增 Repository 方法
-文件位置：main/java/simplex/bn25/zhao102015/server/model/repository/MarketPriceRepository.java
+【2.3】创建 Repository：
+路径：main/java/simplex/bn25/zhao102015/server/model/repository/MarketPriceRepository.java
 
 ```java
-package simplex.bn25.zhao102015.server.model.repository;
-
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.stereotype.Repository;
-
-import java.math.BigDecimal;
-
 @Repository
 public class MarketPriceRepository {
 
@@ -145,18 +373,13 @@ public class MarketPriceRepository {
 }
 ```
 
----
-
-【修改 4】新增 HTML 页面
-文件路径：templates/marketprice/bulk.html
+【2.4】创建 HTML 页面：
+路径：main/resources/templates/marketprice/bulk.html
 
 ```html
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
-<head>
-  <meta charset="UTF-8">
-  <title>Market Price Register</title>
-</head>
+<head><meta charset="UTF-8"><title>Market Price Register</title></head>
 <body th:replace="~{layouts :: header}">
 <div>
   <h2>Market Price 登録</h2>
@@ -175,256 +398,11 @@ public class MarketPriceRepository {
 </html>
 ```
 
----
-
-【修改 5】layouts.html 导航追加入口
-找到模板 layouts.html 的导航部分，追加：
-
+【2.5】导航追加入口
+修改 layouts.html：
 ```html
 <li><a href="/marketprice/bulk">MarketPrice Register</a></li>
 ```
 
----
-
 【完成】
-- 输入格式错误、ticker 重复、不存在时，红字提示；
-- 成功后跳转 /positions；
-- 输入区域使用 textarea；
-- 不需上传文件，仅复制粘贴 ticker,price 的格式。
-
-
-目的】
-为交易一览页面（/trade）追加筛选功能，不破坏已有功能与结构。
-功能包括按 Ticker 文字、交易日（全部 or 今日）筛选，并支持空白时显示全部。
-
----
-
-【修改 1】TradeController.java
-（位置：main/java/simplex/bn25/zhao102015/server/controller/TradeController.java）
-
-在类中追加以下 import（放在已有 import 之后）：
-
-import jakarta.servlet.http.HttpServletRequest;
-import java.sql.Timestamp;
-import java.time.LocalDate;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
-
----
-
-在 @GetMapping 下追加以下方法：
-
-@GetMapping
-public String listTrades(HttpServletRequest request, Model model) {
-    String ticker = request.getParameter("ticker");
-    String date = request.getParameter("date");
-
-    List<simplex.bn25.zhao102015.server.model.Trade> trades;
-
-    if ((ticker == null || ticker.isEmpty()) && (date == null || date.equals("all"))) {
-        trades = tradeService.findAll();
-    } else {
-        trades = tradeService.findByFilter(ticker, date);
-    }
-
-    model.addAttribute("trades", trades);
-    model.addAttribute("ticker", ticker == null ? "" : ticker);
-    model.addAttribute("date", date == null ? "all" : date);
-    return "trades/list";
-}
-
----
-
-【修改 2】TradeService.java
-（位置：main/java/simplex/bn25/zhao102015/server/service/TradeService.java）
-
-追加方法：
-
-public List<Trade> findByFilter(String ticker, String date) {
-    List<Trade> all = tradeRepository.findAll();
-    List<Trade> filtered = new java.util.ArrayList<>();
-
-    LocalDate today = LocalDate.now();
-    Timestamp todayStart = Timestamp.valueOf(LocalDateTime.of(today, LocalTime.MIDNIGHT));
-    Timestamp todayEnd = Timestamp.valueOf(LocalDateTime.of(today, LocalTime.MAX));
-
-    for (Trade t : all) {
-        boolean match = true;
-
-        if (ticker != null && !ticker.isEmpty()) {
-            if (!t.getTicker().toLowerCase().contains(ticker.toLowerCase())) {
-                match = false;
-            }
-        }
-
-        if ("today".equalsIgnoreCase(date)) {
-            Timestamp traded = t.getTradedDatetime();
-            if (traded.before(todayStart) || traded.after(todayEnd)) {
-                match = false;
-            }
-        }
-
-        if (match) {
-            filtered.add(t);
-        }
-    }
-
-    return filtered;
-}
-
----
-
-【修改 3】trades/list.html
-（位置：main/resources/templates/trades/list.html）
-
-在 <table> 标签之前，追加以下 HTML 表单：
-
-<form method="get" th:action="@{/trade}" style="margin-bottom: 20px;">
-  <div>
-    <label for="ticker">Ticker:</label>
-    <input type="text" id="ticker" name="ticker" th:value="${ticker}" placeholder="Ticker" />
-  </div>
-  <div>
-    <label>Date:</label>
-    <input type="radio" id="all" name="date" value="all"
-           th:checked="${date == 'all'}" />
-    <label for="all">ALL</label>
-
-    <input type="radio" id="today" name="date" value="today"
-           th:checked="${date == 'today'}" />
-    <label for="today">Today</label>
-  </div>
-  <div>
-    <button type="submit" style="background-color: lightgreen;">フィルター</button>
-  </div>
-</form>
-
----
-
-【完成】
-- 无匹配数据时自动显示“データがありません。” 无需改动；
-- 保持原有数据展示功能；
-- 新筛选功能以参数 ?ticker=xxx&date=today/all 形式运行；
-- 所有代码只做追加，未动原有结构与功能。
-
-
-
-
-【目的】
-为取引入力追加一个验证逻辑：
-→ 保有数量 + 输入数量 不得超过 stock 表中的 shares_issued。
-即：累积买入数量 - 累积卖出数量 + 此次交易数量 ≤ shares_issued。
-
----
-
-【修改 1】新增 annotation：@WithinSharesIssued
-（位置建议：main/java/simplex/bn25/zhao102015/server/annotation/WithinSharesIssued.java）
-
-```java
-package simplex.bn25.zhao102015.server.annotation;
-
-import jakarta.validation.Constraint;
-import jakarta.validation.Payload;
-
-import java.lang.annotation.*;
-
-@Documented
-@Constraint(validatedBy = WithinSharesIssuedValidator.class)
-@Target({ElementType.TYPE})
-@Retention(RetentionPolicy.RUNTIME)
-public @interface WithinSharesIssued {
-    String message() default "発行済株式数を超える数量は登録できません。";
-    Class<?>[] groups() default {};
-    Class<? extends Payload>[] payload() default {};
-}
-```
-
----
-
-【修改 2】新增验证器类
-（位置建议：main/java/simplex/bn25/zhao102015/server/annotation/WithinSharesIssuedValidator.java）
-
-```java
-package simplex.bn25.zhao102015.server.annotation;
-
-import jakarta.validation.ConstraintValidator;
-import jakarta.validation.ConstraintValidatorContext;
-import org.springframework.beans.factory.annotation.Autowired;
-import simplex.bn25.zhao102015.server.controller.TradeInputDto;
-import simplex.bn25.zhao102015.server.model.Side;
-import simplex.bn25.zhao102015.server.model.repository.TradeRepository;
-import simplex.bn25.zhao102015.server.model.repository.StockRepository;
-import simplex.bn25.zhao102015.server.model.Trade;
-import simplex.bn25.zhao102015.server.model.Stock;
-
-import java.util.List;
-
-public class WithinSharesIssuedValidator implements ConstraintValidator<WithinSharesIssued, TradeInputDto> {
-
-    @Autowired
-    private TradeRepository tradeRepository;
-
-    @Autowired
-    private StockRepository stockRepository;
-
-    @Override
-    public boolean isValid(TradeInputDto input, ConstraintValidatorContext context) {
-        if (input.getStockId() == null || input.getQuantity() == null || input.getSide() != Side.BUY) {
-            return true; // 卖出或不完整数据不验证
-        }
-
-        List<Trade> trades = tradeRepository.findAllByStockId(input.getStockId());
-        long currentTotalBuy = trades.stream()
-                .filter(t -> t.getSide() == Side.BUY)
-                .mapToLong(Trade::getQuantity)
-                .sum();
-
-        long currentTotalSell = trades.stream()
-                .filter(t -> t.getSide() == Side.SELL)
-                .mapToLong(Trade::getQuantity)
-                .sum();
-
-        long afterBuy = currentTotalBuy - currentTotalSell + input.getQuantity();
-
-        Stock stock = stockRepository.findById(input.getStockId()).orElse(null);
-        if (stock == null) return true;
-
-        return afterBuy <= stock.getSharesIssued();
-    }
-}
-```
-
----
-
-【修改 3】TradeInputDto.java 添加注解
-（文件位置：main/java/simplex/bn25/zhao102015/server/controller/TradeInputDto.java）
-
-在 class 上添加注解：
-
-```java
-@WithinSharesIssued
-public class TradeInputDto {
-    ...
-```
-
----
-
-【修改 4】trades/input.html（若使用）
-（路径：templates/trades/input.html）
-
-可选：在数量栏下添加一段提示错误信息：
-
-```html
-<div th:if="${#fields.hasErrors('quantity')}" th:errors="*{quantity}" style="color:red"></div>
-```
-
----
-
-【完成】
-- 只影响买入交易；
-- 自动从 trade 表累积已有买卖数量；
-- 调用 stock 表判断 shares_issued；
-- 如超过，提示“発行済株式数を超える数量は登録できません。”
-
-以上逻辑完全通过 annotation + validator 实现，不影响控制器代码。
-
+两个功能实现将无缝对接你现有结构，验证和注册逻辑集中，结构清晰，输入错误有红字提示，跳转成功后进入 /positions。
