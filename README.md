@@ -1,1204 +1,452 @@
+===== 【機能①】取引一覧画面 フィルター機能 =====
 
+1. TradeController.java
+--------------------------------------------------
+@Controller
+public class TradeController {
 
-===== FILE: /mnt/data/extracted_main/main/java/simplex/bn25/zhao102015/server/ServerApplication.java =====
+    @Autowired
+    private TradeRepository tradeRepository;
 
-package simplex.bn25.zhao102015.server;
+    @Autowired
+    private StockRepository stockRepository;
 
-import org.springframework.boot.SpringApplication;
-import org.springframework.boot.autoconfigure.SpringBootApplication;
+    @GetMapping("/trade")
+    public String tradeList(@RequestParam(required = false) String ticker,
+                            @RequestParam(defaultValue = "all") String date,
+                            Model model) {
+        List<Trade> trades;
 
-@SpringBootApplication
-public class ServerApplication {
-	public static void main(String[] args) {
-		SpringApplication.run(ServerApplication.class, args);
-	}
-}
-
-
-===== FILE: /mnt/data/extracted_main/main/java/simplex/bn25/zhao102015/server/annotation/MultipleOf100.java =====
-
-package simplex.bn25.zhao102015.server.annotation;
-
-import jakarta.validation.Constraint;
-import jakarta.validation.Payload;
-
-import java.lang.annotation.*;
-
-@Documented
-@Constraint(validatedBy = MultipleOf100Validator.class)
-@Target({ElementType.FIELD})
-@Retention(RetentionPolicy.RUNTIME)
-public @interface MultipleOf100 {
-    String message() default "100の倍数を入力してください";
-    Class<?>[] groups() default {};
-    Class<? extends Payload>[] payload() default {};
-}
-
-===== FILE: /mnt/data/extracted_main/main/java/simplex/bn25/zhao102015/server/annotation/MultipleOf100Validator.java =====
-
-package simplex.bn25.zhao102015.server.annotation;
-
-import jakarta.validation.ConstraintValidator;
-import jakarta.validation.ConstraintValidatorContext;
-
-public class MultipleOf100Validator implements ConstraintValidator<MultipleOf100, Long> {
-    @Override
-    public boolean isValid(Long value, ConstraintValidatorContext context) {
-        if (value == null) {
-            return true;
+        // フィルター条件なし：全件取得
+        if ((ticker == null || ticker.isEmpty()) && date.equals("all")) {
+            trades = tradeRepository.findAll();
         }
-        return value %100==0;
+        // 日付 = today（当日のみ取得）
+        else if (date.equals("today")) {
+            LocalDate today = LocalDate.now();
+            LocalDateTime start = today.atStartOfDay();
+            LocalDateTime end = today.atTime(LocalTime.MAX);
+
+            if (ticker == null || ticker.isEmpty()) {
+                trades = tradeRepository.findByTradedDatetimeBetween(start, end);
+            } else {
+                trades = tradeRepository.findByTickerAndTradedDatetimeBetween(ticker, start, end);
+            }
+        }
+        // Ticker のみで検索
+        else {
+            trades = tradeRepository.findByTickerContaining(ticker);
+        }
+
+        model.addAttribute("trades", trades);
+        return "trade";
     }
 }
+--------------------------------------------------
 
+2. TradeRepository.java
+--------------------------------------------------
+public interface TradeRepository extends JpaRepository<Trade, Integer> {
 
+    List<Trade> findByTradedDatetimeBetween(LocalDateTime start, LocalDateTime end); // ★追加
 
-===== FILE: /mnt/data/extracted_main/main/java/simplex/bn25/zhao102015/server/annotation/TradeDatetimeValidator.java =====
+    @Query("SELECT t FROM Trade t WHERE t.stock.ticker = :ticker AND t.tradedDatetime BETWEEN :start AND :end")
+    List<Trade> findByTickerAndTradedDatetimeBetween(@Param("ticker") String ticker,
+                                                      @Param("start") LocalDateTime start,
+                                                      @Param("end") LocalDateTime end); // ★追加
 
-package simplex.bn25.zhao102015.server.annotation;
-
-import jakarta.validation.ConstraintValidator;
-import jakarta.validation.ConstraintValidatorContext;
-import java.time.DayOfWeek;
-import java.time.LocalDateTime;
-import java.time.LocalTime;
-
-public class TradeDatetimeValidator
-        implements ConstraintValidator<ValidTradedDatetime, LocalDateTime> {
-    @Override
-    public boolean isValid(LocalDateTime value, ConstraintValidatorContext context){
-        if(value == null) return true;
-        if(value.isAfter(LocalDateTime.now())) return false;
-        DayOfWeek day = value.getDayOfWeek();
-        if(day == DayOfWeek.SATURDAY || day == DayOfWeek.SUNDAY) return false;
-
-        LocalTime time = value.toLocalTime();
-        LocalTime start = LocalTime.of(9,0);
-        LocalTime end = LocalTime.of(15,30);
-        if(time.isBefore(start) || time.isAfter(end)) return false;
-
-        return true;
-    }
-
-
+    @Query("SELECT t FROM Trade t WHERE t.stock.ticker LIKE %:ticker%")
+    List<Trade> findByTickerContaining(@Param("ticker") String ticker); // ★追加
 }
+--------------------------------------------------
+
+3. trade.html（HTML テンプレート冒頭に追加）
+--------------------------------------------------
+<form method="get" action="/trade">
+  <input type="text" name="ticker" placeholder="Ticker（任意）"/>
+  <label><input type="radio" name="date" value="all" checked> All</label>
+  <label><input type="radio" name="date" value="today"> Today</label>
+  <button type="submit" style="background-color:#ccffcc;">フィルター</button>
+</form>
+--------------------------------------------------
 
 
+===== 【機能②】取引入力 validation追加 =====
 
-===== FILE: /mnt/data/extracted_main/main/java/simplex/bn25/zhao102015/server/annotation/ValidTradedDatetime.java =====
-
-package simplex.bn25.zhao102015.server.annotation;
-
-
-import jakarta.validation.Constraint;
-import jakarta.validation.Payload;
-import java.lang.annotation.*;
-
-    @Documented
-    @Constraint(validatedBy = TradeDatetimeValidator.class)
-    @Target({ElementType.FIELD})
-    @Retention(RetentionPolicy.RUNTIME)
-
-    public @interface ValidTradedDatetime {
-        String message() default "日時は平日9:00~15:30の過去の時間にしてください";
-        Class<?>[] groups() default {};
-        Class<? extends Payload>[] payload() default {};
-
-    }
-
-
-===== FILE: /mnt/data/extracted_main/main/java/simplex/bn25/zhao102015/server/annotation/ValidTradeInput.java =====
-
-package simplex.bn25.zhao102015.server.annotation;
-
-import jakarta.validation.Constraint;
-import jakarta.validation.Payload;
-
-import java.lang.annotation.*;
-
-@Documented
-@Constraint(validatedBy = ValidTradeInputValidator.class)
+1. WithinIssuedLimit.java（annotation/ 配下に新規作成）
+--------------------------------------------------
 @Target({ElementType.TYPE})
 @Retention(RetentionPolicy.RUNTIME)
-public @interface ValidTradeInput {
-    String message() default "無効な取引入力です";
+@Constraint(validatedBy = WithinIssuedLimitValidator.class)
+public @interface WithinIssuedLimit {
+    String message() default "保有数と入力数の合計が発行済株式数を超えています。";
     Class<?>[] groups() default {};
     Class<? extends Payload>[] payload() default {};
 }
+--------------------------------------------------
 
+2. WithinIssuedLimitValidator.java
+--------------------------------------------------
+public class WithinIssuedLimitValidator implements ConstraintValidator<WithinIssuedLimit, TradeInputDto> {
 
-===== FILE: /mnt/data/extracted_main/main/java/simplex/bn25/zhao102015/server/annotation/ValidTradeInputValidator.java =====
-
-package simplex.bn25.zhao102015.server.annotation;
-
-import jakarta.validation.ConstraintValidator;
-import jakarta.validation.ConstraintValidatorContext;
-import org.springframework.beans.factory.annotation.Autowired;
-import simplex.bn25.zhao102015.server.model.Side;
-import simplex.bn25.zhao102015.server.model.Trade;
-import simplex.bn25.zhao102015.server.model.repository.TradeRepository;
-import simplex.bn25.zhao102015.server.controller.TradeInputDto;
-
-import java.sql.Timestamp;
-import java.util.List;
-
-public class ValidTradeInputValidator implements ConstraintValidator<ValidTradeInput, TradeInputDto> {
+    @Autowired
+    private StockRepository stockRepository;
 
     @Autowired
     private TradeRepository tradeRepository;
 
     @Override
-    public boolean isValid(TradeInputDto input, ConstraintValidatorContext context) {
-        if (input.getStockId() == null || input.getTradedDatetime() == null
-                || input.getQuantity() == null || input.getSide() == null) {
-            return true; // 有空字段，跳过校验
-        }
-
-        List<Trade> trades = tradeRepository.findAllByStockIdOrderByTradedDatetimeAsc(input.getStockId());
-
-        // 计算在当前交易时间之前的保有数
-        long currentHoldings = 0L;
-        for (Trade trade : trades) {
-            if (trade.getTradedDatetime().after(Timestamp.valueOf(input.getTradedDatetime()))) {
-                break;
-            }
-            currentHoldings += trade.getSide() == Side.BUY
-                    ? trade.getQuantity()
-                    : -trade.getQuantity();
-        }
-
-        long delta = input.getSide() == Side.BUY
-                ? input.getQuantity()
-                : -input.getQuantity();
-
-        boolean validHoldings = (currentHoldings + delta) >= 0;
-
-        boolean validDatetime = trades.isEmpty()
-                || trades.get(trades.size() - 1).getTradedDatetime()
-                .compareTo(Timestamp.valueOf(input.getTradedDatetime())) < 0;
-
-        // 开始构建错误提示
-        context.disableDefaultConstraintViolation();
-
-        if (!validHoldings) {
-            context.buildConstraintViolationWithTemplate("取引後の保有数がマイナスになります。")
-                    .addPropertyNode("quantity")
-                    .addConstraintViolation();
-        }
-
-        if (!validDatetime) {
-            context.buildConstraintViolationWithTemplate("既存の取引より前の日時は指定できません。")
-                    .addPropertyNode("tradedDatetime")
-                    .addConstraintViolation();
-        }
-
-        return validHoldings && validDatetime;
-    }
-}
-
-
-===== FILE: /mnt/data/extracted_main/main/java/simplex/bn25/zhao102015/server/annotation/WithinSharesIssued.java =====
-
-package simplex.bn25.zhao102015.server.annotation;
-
-import jakarta.validation.Constraint;
-import jakarta.validation.Payload;
-
-import java.lang.annotation.*;
-
-@Documented
-@Constraint(validatedBy = WithinSharesIssuedValidator.class)
-@Target({ElementType.TYPE})
-@Retention(RetentionPolicy.RUNTIME)
-public @interface WithinSharesIssued {
-    String message() default "発行済株式数を超えています";
-    Class<?>[] groups() default {};
-    Class<? extends Payload>[] payload() default {};
-}
-
-
-===== FILE: /mnt/data/extracted_main/main/java/simplex/bn25/zhao102015/server/annotation/WithinSharesIssuedValidator.java =====
-
-package simplex.bn25.zhao102015.server.annotation;
-
-import jakarta.validation.ConstraintValidator;
-import jakarta.validation.ConstraintValidatorContext;
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Component;
-import simplex.bn25.zhao102015.server.model.Stock;
-import simplex.bn25.zhao102015.server.model.repository.StockRepository;
-import simplex.bn25.zhao102015.server.controller.TradeInputDto;
-import simplex.bn25.zhao102015.server.service.StockService;
-
-@Component
-public class WithinSharesIssuedValidator implements ConstraintValidator<WithinSharesIssued, TradeInputDto> {
-
-    @Autowired
-    private StockService stockService;
-
-    @Override
     public boolean isValid(TradeInputDto dto, ConstraintValidatorContext context) {
-        if (dto.getStockId() == null || dto.getQuantity() == null) {
-            return true;
-        }
+        Stock stock = stockRepository.findByTicker(dto.getTicker());
+        if (stock == null) return true;
 
-        Stock stock = stockService.findById(dto.getStockId());
-        if (stock == null) {
-            return true;
-        }
+        Long held = tradeRepository.getHoldingQuantityByTicker(dto.getTicker());
+        if (held == null) held = 0L;
 
-        boolean valid = dto.getQuantity() <= stock.getSharesIssued();
-        if (!valid) {
-            context.disableDefaultConstraintViolation();
-            context.buildConstraintViolationWithTemplate(context.getDefaultConstraintMessageTemplate())
-                    .addPropertyNode("quantity")
-                    .addConstraintViolation();
-        }
-
-        return valid;
+        return held + dto.getQuantity() <= stock.getSharesIssued();
     }
 }
+--------------------------------------------------
 
-===== FILE: /mnt/data/extracted_main/main/java/simplex/bn25/zhao102015/server/controller/HelloController.java =====
+3. TradeRepository.java（機能①に追加でさらに以下を追加）
+--------------------------------------------------
+@Query("SELECT COALESCE(SUM(CASE WHEN t.side = 'BUY' THEN t.quantity ELSE -t.quantity END), 0) " +
+       "FROM Trade t WHERE t.stock.ticker = :ticker")
+Long getHoldingQuantityByTicker(@Param("ticker") String ticker); // ★追加
+--------------------------------------------------
 
-package simplex.bn25.zhao102015.server.controller;
-
-import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.PathVariable;
-import org.springframework.web.bind.annotation.RequestParam;
-
-@Controller
-public class HelloController {
-
-    @GetMapping("/hello/{name}")
-    public String hello(@PathVariable String name, Model model) {
-        model.addAttribute("message", String.format("Hello World, Hello %s.", name));
-        return "hello";
-    }
-
-    @GetMapping("/hello")
-    public String callNameByQueryParam(
-            @RequestParam(name = "name", required = false, defaultValue = "World") String name,
-            Model model
-    ) {
-        model.addAttribute("message", String.format("Hello World, Hello %s.", name));
-        return "hello";
-    }
-
-}
-
-===== FILE: /mnt/data/extracted_main/main/java/simplex/bn25/zhao102015/server/controller/HomeController.java =====
-
-package simplex.bn25.zhao102015.server.controller;
-
-import org.springframework.stereotype.Controller;
-import org.springframework.web.bind.annotation.GetMapping;
-
-@Controller
-public class HomeController {
-
-    @GetMapping("/")
-    public String index() {
-        return "home";
-    }
-}
-
-
-===== FILE: /mnt/data/extracted_main/main/java/simplex/bn25/zhao102015/server/controller/StockController.java =====
-
-package simplex.bn25.zhao102015.server.controller;
-
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.dao.DataIntegrityViolationException;
-import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
-import org.springframework.web.bind.annotation.GetMapping;
-import org.springframework.web.bind.annotation.ModelAttribute;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import simplex.bn25.zhao102015.server.service.StockService;
-import simplex.bn25.zhao102015.server.model.Stock;
-import org.springframework.validation.annotation.Validated;
-import org.springframework.validation.BindingResult;
-
-import java.util.List;
-
-@Controller
-@RequestMapping("/stocks")
-public class StockController {
-
-    private final StockService stockService;
-
-    @Autowired
-    public StockController(StockService stockService) {
-        this.stockService = stockService;
-    }
-
-    @GetMapping
-    public String list(Model model) {
-        List<Stock> stocks = stockService.listAll();
-        model.addAttribute("stocks", stocks);
-        model.addAttribute("noData", stocks.isEmpty());
-        return "stocks/list";
-    }
-
-    @GetMapping("/new")
-    public String inputForm(Model model) {
-        model.addAttribute("input", new StockInputDto());
-        return "stocks/input";
-    }
-
-    @PostMapping("/new") // POSTにマッピング
-    public String create(@ModelAttribute("input") @Validated StockInputDto input,
-                         BindingResult bindingResult, Model model) {
-        if (bindingResult.hasErrors()) {
-            return "stocks/input";
-        }
-
-        try {
-            stockService.registerNewStock(input.toStock());
-        } catch (DataIntegrityViolationException e) {
-            bindingResult.rejectValue("ticker", "error.ticker", "銘柄コードはすでに利用されています。");
-            return "stocks/input";
-        }
-
-        return "redirect:/stocks";
-    }
-}
-
-
-===== FILE: /mnt/data/extracted_main/main/java/simplex/bn25/zhao102015/server/controller/StockInputDto.java =====
-
-package simplex.bn25.zhao102015.server.controller;
-
-import org.hibernate.validator.constraints.Range;
-import simplex.bn25.zhao102015.server.model.Market;
-import simplex.bn25.zhao102015.server.model.Stock;
-import jakarta.validation.constraints.NotBlank;
-import jakarta.validation.constraints.NotNull;
-import jakarta.validation.constraints.Pattern;
-
-public final class StockInputDto {
-
-    @NotBlank
-    @Pattern(regexp = "[1-9][ACDFGHJKLMNPRSTUWXY0-9][0-9][ACDFGHJKLMNPRSTUWXY0-9]")
-    private String ticker;
-
-    @NotBlank
-    private String name;
-
-    @NotNull
-    private Market exchangeMarket;
-
-    @Range(min = 1, max = 999_999_999_999L)
-    private long sharesIssued;
-
-    public String getTicker() {
-        return ticker;
-    }
-
-    public void setTicker(String ticker) {
-        this.ticker = ticker;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public Market getExchangeMarket() {
-        return exchangeMarket;
-    }
-
-    public void setExchangeMarket(Market exchangeMarket) {
-        this.exchangeMarket = exchangeMarket;
-    }
-
-    public long getSharesIssued() {
-        return sharesIssued;
-    }
-
-    public void setSharesIssued(long sharesIssued) {
-        this.sharesIssued = sharesIssued;
-    }
-
-    public Stock toStock() {
-        Stock stock = new Stock();
-        stock.setTicker(ticker);
-        stock.setName(name);
-        stock.setExchangeMarket(exchangeMarket);
-        stock.setSharesIssued(sharesIssued);
-        return stock;
-    }
-}
-
-
-===== FILE: /mnt/data/extracted_main/main/java/simplex/bn25/zhao102015/server/controller/TradeController.java =====
-
-package simplex.bn25.zhao102015.server.controller;
-
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Controller;
-import org.springframework.ui.Model;
-import org.springframework.validation.BindingResult;
-import org.springframework.validation.annotation.Validated;
-import org.springframework.web.bind.annotation.*;
-import simplex.bn25.zhao102015.server.controller.TradeInputDto;
-import simplex.bn25.zhao102015.server.model.Stock;
-import simplex.bn25.zhao102015.server.service.StockService;
-import simplex.bn25.zhao102015.server.service.TradeService;
-
-import java.util.List;
-
-@Controller
-@RequestMapping("/trade")
-public class TradeController {
-
-    private final TradeService tradeService;
-    private final StockService stockService;
-
-    @Autowired
-    public TradeController(TradeService tradeService, StockService stockService) {
-        this.tradeService = tradeService;
-        this.stockService = stockService;
-    }
-
-    @GetMapping
-    public String list(Model model) {
-        List<?> trades = tradeService.findAll();
-        model.addAttribute("trades", trades);
-        model.addAttribute("noData", trades.isEmpty());
-        return "trades/list";
-    }
-
-    @GetMapping("/new")
-    public String newTradeForm(@RequestParam(value = "ticker", required = false) String ticker, Model model) {
-        Stock stock = stockService.findByTicker(ticker);
-        TradeInputDto dto = new TradeInputDto();
-        dto.setStockId(stock.getId());
-        dto.setTicker(stock.getTicker());
-        dto.setName(stock.getName());
-
-        model.addAttribute("input", dto);
-        return "trades/input";
-    }
-
-    @PostMapping("/new")
-    public String registerTrade(@Validated @ModelAttribute("input") TradeInputDto input,
-                                BindingResult bindingResult, Model model) {
-        if (bindingResult.hasErrors()) {
-            model.addAttribute("input", input);
-            return "trades/input";
-        }
-
-        tradeService.register(input);
-        return "redirect:/trade";
-    }
-
-}
-
-
-===== FILE: /mnt/data/extracted_main/main/java/simplex/bn25/zhao102015/server/controller/TradeInputDto.java =====
-
-package simplex.bn25.zhao102015.server.controller;
-
-import jakarta.validation.constraints.*;
-import org.hibernate.validator.constraints.Range;
-import org.springframework.format.annotation.DateTimeFormat;
-import simplex.bn25.zhao102015.server.annotation.MultipleOf100;
-import simplex.bn25.zhao102015.server.annotation.ValidTradeInput;
-import simplex.bn25.zhao102015.server.annotation.ValidTradedDatetime;
-import simplex.bn25.zhao102015.server.annotation.WithinSharesIssued;
-import simplex.bn25.zhao102015.server.model.Side;
-import simplex.bn25.zhao102015.server.model.Stock;
-
-import java.math.BigDecimal;
-import java.time.LocalDateTime;
-
-@ValidTradeInput
-@WithinSharesIssued
+4. TradeInputDto.java（クラスにアノテーション追加）
+--------------------------------------------------
+@WithinIssuedLimit // ★追加：クラスの上に追加
 public class TradeInputDto {
 
     @NotNull
-    private Integer stockId;
-
     private String ticker;
-    private String name;
 
-    @NotNull(message = "入力してください")
-    @DateTimeFormat(iso = DateTimeFormat.ISO.DATE_TIME)
-    @ValidTradedDatetime
+    @NotNull
     private LocalDateTime tradedDatetime;
 
-    @NotNull(message = "入力してください")
-    private Side side;
+    @NotNull
+    private String side;
 
-    @NotNull(message = "入力してください")
-    @Positive(message = "0より大きい数値を入力してください")
-    @MultipleOf100
-    @Digits(integer = 12, fraction = 0, message = "12桁以下の整数を入力してください")
+    @NotNull
     private Long quantity;
 
-    @NotNull(message = "入力してください")
-    @Positive(message = "0より大きい数値を入力してください")
-    @Digits(integer = 10, fraction = 2, message = "小数点以下2桁以内、999,999,999,999以下の数値を入力してください")
+    @NotNull
     private BigDecimal tradedPrice;
 
-    public Integer getStockId() {
-        return stockId;
-    }
-
-    public void setStockId(Integer stockId) {
-        this.stockId = stockId;
-    }
-
-    public String getTicker() {
-        return ticker;
-    }
-
-    public void setTicker(String ticker) {
-        this.ticker = ticker;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public LocalDateTime getTradedDatetime() {
-        return tradedDatetime;
-    }
-
-    public void setTradedDatetime(LocalDateTime tradedDatetime) {
-        this.tradedDatetime = tradedDatetime;
-    }
-
-    public Side getSide() {
-        return side;
-    }
-
-    public void setSide(Side side) {
-        this.side = side;
-    }
-
-    public Long getQuantity() {
-        return quantity;
-    }
-
-    public void setQuantity(Long quantity) {
-        this.quantity = quantity;
-    }
-
-    public BigDecimal getTradedPrice() {
-        return tradedPrice;
-    }
-
-    public void setTradedPrice(BigDecimal tradedPrice) {
-        this.tradedPrice = tradedPrice;
-    }
-
-    public static TradeInputDto fromStock(Stock stock) {
-        TradeInputDto dto = new TradeInputDto();
-        dto.setStockId(stock.getId());
-        dto.setTicker(stock.getTicker());
-        dto.setName(stock.getName());
-        return dto;
-    }
+    // getter/setter...
 }
+--------------------------------------------------
+===== 【機能③】時価一括登録画面（/marketprice/bulk） =====
 
+1. HTML（templates/marketprice_bulk.html）
+--------------------------------------------------
+<!DOCTYPE html>
+<html xmlns:th="http://www.thymeleaf.org">
+<head>
+    <meta charset="UTF-8">
+    <title>Market Price Bulk Register</title>
+</head>
+<body>
+<h1>Market Price Register</h1>
 
-===== FILE: /mnt/data/extracted_main/main/java/simplex/bn25/zhao102015/server/model/Market.java =====
+<form method="post" action="/marketprice/bulk">
+    <label for="bulkText">Market Price</label><br/>
+    <textarea id="bulkText" name="bulkText" rows="10" cols="50" placeholder="2432,1500.00
+4523,1200.50
+..."></textarea><br/><br/>
+    <button type="submit">Register</button>
+</form>
 
-package simplex.bn25.zhao102015.server.model;
+<div th:if="${error}" style="color:red;" th:text="${error}"></div>
+</body>
+</html>
+--------------------------------------------------
 
-public enum Market {
-    PRIME,
-    STANDARD,
-    GROWTH
-}
-
-
-===== FILE: /mnt/data/extracted_main/main/java/simplex/bn25/zhao102015/server/model/Side.java =====
-
-package simplex.bn25.zhao102015.server.model;
-
-public enum Side {
-    BUY,
-    SELL
-}
-
-
-===== FILE: /mnt/data/extracted_main/main/java/simplex/bn25/zhao102015/server/model/Stock.java =====
-
-package simplex.bn25.zhao102015.server.model;
-
-public class Stock {
-    private int id;
-    private String ticker;
-    private String name;
-    private Market exchangeMarket;
-    private long sharesIssued;
-
-    public int getId() {
-        return id;
-    }
-
-    public void setId(int id) {
-        this.id = id;
-    }
-
-    public String getTicker() {
-        return ticker;
-    }
-
-    public void setTicker(String ticker) {
-        this.ticker = ticker;
-    }
-
-    public String getName() {
-        return name;
-    }
-
-    public void setName(String name) {
-        this.name = name;
-    }
-
-    public Market getExchangeMarket() {
-        return exchangeMarket;
-    }
-
-    public void setExchangeMarket(Market exchangeMarket) {
-        this.exchangeMarket = exchangeMarket;
-    }
-
-    public long getSharesIssued() {
-        return sharesIssued;
-    }
-
-    public void setSharesIssued(long sharesIssued) {
-        this.sharesIssued = sharesIssued;
-    }
-}
-
-
-===== FILE: /mnt/data/extracted_main/main/java/simplex/bn25/zhao102015/server/model/Trade.java =====
-
-package simplex.bn25.zhao102015.server.model;
-
-import java.math.BigDecimal;
-import java.sql.Timestamp;
-
-public class Trade {
-    private int id;
-    private Timestamp tradedDatetime;
-    private int stockId;
-    private Side side;
-    private long quantity;
-    private BigDecimal tradedPrice;
-    private Timestamp createdDatetime;
-
-    private String ticker; // from stock table
-    private String name;   // from stock table
-
-    public int getId() { return id; }
-    public void setId(int id) { this.id = id; }
-
-    public Timestamp getTradedDatetime() { return tradedDatetime; }
-    public void setTradedDatetime(Timestamp tradedDatetime) { this.tradedDatetime = tradedDatetime; }
-
-    public int getStockId() { return stockId; }
-    public void setStockId(int stockId) { this.stockId = stockId; }
-
-    public Side getSide() { return side; }
-    public void setSide(Side side) { this.side = side; }
-
-    public long getQuantity() { return quantity; }
-    public void setQuantity(long quantity) { this.quantity = quantity; }
-
-    public BigDecimal getTradedPrice() { return tradedPrice; }
-    public void setTradedPrice(BigDecimal tradedPrice) { this.tradedPrice = tradedPrice; }
-
-    public Timestamp getCreatedDatetime() { return createdDatetime; }
-    public void setCreatedDatetime(Timestamp createdDatetime) { this.createdDatetime = createdDatetime; }
-
-    public String getTicker() { return ticker; }
-    public void setTicker(String ticker) { this.ticker = ticker; }
-
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
-}
-
-
-===== FILE: /mnt/data/extracted_main/main/java/simplex/bn25/zhao102015/server/model/repository/StockRepository.java =====
-
-package simplex.bn25.zhao102015.server.model.repository;
-
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.jdbc.core.BeanPropertyRowMapper;
-import org.springframework.jdbc.core.DataClassRowMapper;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
-import org.springframework.stereotype.Repository;
-import simplex.bn25.zhao102015.server.model.Market;
-import simplex.bn25.zhao102015.server.model.Stock;
-
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.List;
-import java.util.Optional;
-
-@Repository
-public class StockRepository {
-
-    private final JdbcTemplate jdbcTemplate;
-    private final RowMapper<Stock> rowMapper = new DataClassRowMapper<>(Stock.class);
+2. MarketPriceController.java（新規作成）
+--------------------------------------------------
+@Controller
+public class MarketPriceController {
 
     @Autowired
-    public StockRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
-    }
-
-    public List<Stock> findAll() {
-        String sql = "SELECT * FROM stock ORDER BY id";
-        return jdbcTemplate.query(sql, new BeanPropertyRowMapper<>(Stock.class));
-    }
-
-    public Optional<Stock> findByTicker(String ticker) {
-        String sql = "SELECT * FROM stock WHERE ticker = ?";
-        List<Stock> results = jdbcTemplate.query(sql, new BeanPropertyRowMapper<>(Stock.class), ticker);
-        return results.stream().findFirst();
-    }
-
-    public void register(Stock stock) {
-        this.jdbcTemplate.query(
-                "INSERT INTO stock (ticker, name, exchange_market, shares_issued) VALUES (?, ?, ?, ?) RETURNING *",
-                rowMapper,
-                stock.getTicker(),
-                stock.getName(),
-                stock.getExchangeMarket().name(),
-                stock.getSharesIssued()
-        );
-    }
-
-    public Optional<Stock> findById(Integer id) {
-        String sql = "SELECT * FROM stock WHERE id = ?";
-        return jdbcTemplate.query(sql, new StockRowMapper(), id).stream().findFirst();
-    }
-
-    private static class StockRowMapper implements RowMapper<Stock> {
-        @Override
-        public Stock mapRow(ResultSet rs, int rowNum) throws SQLException {
-            Stock stock = new Stock();
-            stock.setId(rs.getInt("id"));
-            stock.setTicker(rs.getString("ticker"));
-            stock.setName(rs.getString("name"));
-            stock.setExchangeMarket(Market.valueOf(rs.getString("exchange_market")));
-            stock.setSharesIssued(rs.getLong("shares_issued"));
-            return stock;
-        }
-    }
-}
-
-===== FILE: /mnt/data/extracted_main/main/java/simplex/bn25/zhao102015/server/model/repository/TradeRepository.java =====
-
-package simplex.bn25.zhao102015.server.model.repository;
-
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.jdbc.core.JdbcTemplate;
-import org.springframework.jdbc.core.RowMapper;
-import org.springframework.stereotype.Repository;
-import simplex.bn25.zhao102015.server.model.Side;
-import simplex.bn25.zhao102015.server.model.Trade;
-
-import java.sql.ResultSet;
-import java.sql.SQLException;
-import java.util.List;
-
-@Repository
-public class TradeRepository {
-
-    private final JdbcTemplate jdbcTemplate;
+    private StockRepository stockRepository;
 
     @Autowired
-    public TradeRepository(JdbcTemplate jdbcTemplate) {
-        this.jdbcTemplate = jdbcTemplate;
+    private MarketPriceRepository marketPriceRepository;
+
+    @GetMapping("/marketprice/bulk")
+    public String showBulkForm() {
+        return "marketprice_bulk";
     }
 
-    public List<Trade> findAll() {
-        String sql = "SELECT t.*, s.ticker, s.name " +
-                "FROM trade t " +
-                "JOIN stock s ON t.stock_id = s.id " +
-                "ORDER BY t.traded_datetime DESC";
-
-        return jdbcTemplate.query(sql, new TradeRowMapper());
-    }
-
-    public  List<Trade> findAllByStockIdOrderByTradedDatetimeAsc(int stockId){
-        String sql = "SELECT t.*, s.ticker, s.name FROM trade t JOIN stock s ON t.stock_id = s.id " +
-                "WHERE t.stock_id = ? ORDER BY t.traded_datetime ASC";
-        return jdbcTemplate.query(sql, new TradeRowMapper(), stockId);
-    }
-
-
-    public int insert(Trade trade) {
-        String sql = """
-            INSERT INTO trade (traded_datetime, stock_id, side, quantity, traded_price, created_datetime)
-            VALUES (?, ?, ?, ?, ?, NOW())
-        """;
-
-        return jdbcTemplate.update(sql,
-                trade.getTradedDatetime(),
-                trade.getStockId(),
-                trade.getSide().name(),
-                trade.getQuantity(),
-                trade.getTradedPrice());
-    }
-
-    private static class TradeRowMapper implements RowMapper<Trade> {
-        @Override
-        public Trade mapRow(ResultSet rs, int rowNum) throws SQLException {
-            Trade trade = new Trade();
-            trade.setId(rs.getInt("id"));
-            trade.setTradedDatetime(rs.getTimestamp("traded_datetime"));
-            trade.setStockId(rs.getInt("stock_id"));
-            trade.setSide(Side.valueOf(rs.getString("side").toUpperCase()));
-            trade.setQuantity(rs.getLong("quantity"));
-            trade.setTradedPrice(rs.getBigDecimal("traded_price"));
-            trade.setCreatedDatetime(rs.getTimestamp("created_datetime"));
-            trade.setTicker(rs.getString("ticker"));
-            trade.setName(rs.getString("name"));
-            return trade;
+    @PostMapping("/marketprice/bulk")
+    public String registerMarketPrices(@RequestParam String bulkText, Model model) {
+        if (bulkText == null || bulkText.isBlank()) {
+            model.addAttribute("error", "入力が空です。");
+            return "marketprice_bulk";
         }
+
+        String[] lines = bulkText.split("\r?\n");
+        Set<String> seenTickers = new HashSet<>();
+        List<MarketPrice> marketPrices = new ArrayList<>();
+
+        for (String line : lines) {
+            String[] parts = line.trim().split(",");
+            if (parts.length != 2) {
+                model.addAttribute("error", "列数が正しくありません: " + line);
+                return "marketprice_bulk";
+            }
+
+            String ticker = parts[0].trim();
+            String priceStr = parts[1].trim();
+
+            if (ticker.isEmpty() || seenTickers.contains(ticker)) {
+                model.addAttribute("error", "空のtickerまたは重複があります: " + ticker);
+                return "marketprice_bulk";
+            }
+
+            seenTickers.add(ticker);
+
+            BigDecimal price;
+            try {
+                price = new BigDecimal(priceStr);
+                if (price.scale() > 2 || price.compareTo(BigDecimal.ZERO) < 0) {
+                    throw new NumberFormatException();
+                }
+            } catch (NumberFormatException e) {
+                model.addAttribute("error", "不正な価格形式です: " + priceStr);
+                return "marketprice_bulk";
+            }
+
+            Stock stock = stockRepository.findByTicker(ticker);
+            if (stock == null) {
+                model.addAttribute("error", "存在しないtickerです: " + ticker);
+                return "marketprice_bulk";
+            }
+
+            MarketPrice mp = new MarketPrice();
+            mp.setStock(stock);
+            mp.setMarketPrice(price);
+            mp.setCreatedDatetime(LocalDateTime.now());
+
+            marketPrices.add(mp);
+        }
+
+        marketPriceRepository.saveAll(marketPrices);
+        return "redirect:/positions";
+    }
+}
+--------------------------------------------------
+
+3. MarketPrice.java（model 配下に新規作成）
+--------------------------------------------------
+@Entity
+public class MarketPrice {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Integer id;
+
+    @ManyToOne
+    @JoinColumn(name = "stock_id", nullable = false)
+    private Stock stock;
+
+    @Column(name = "market_price", nullable = false, precision = 10, scale = 2)
+    private BigDecimal marketPrice;
+
+    @Column(name = "created_datetime", nullable = false)
+    private LocalDateTime createdDatetime = LocalDateTime.now();
+
+    // getter/setter
+    public Integer getId() { return id; }
+    public Stock getStock() { return stock; }
+    public void setStock(Stock stock) { this.stock = stock; }
+    public BigDecimal getMarketPrice() { return marketPrice; }
+    public void setMarketPrice(BigDecimal marketPrice) { this.marketPrice = marketPrice; }
+    public LocalDateTime getCreatedDatetime() { return createdDatetime; }
+    public void setCreatedDatetime(LocalDateTime createdDatetime) { this.createdDatetime = createdDatetime; }
+}
+--------------------------------------------------
+
+4. MarketPriceRepository.java（新規作成）
+--------------------------------------------------
+public interface MarketPriceRepository extends JpaRepository<MarketPrice, Integer> {
+
+    @Query("SELECT m FROM MarketPrice m WHERE m.stock.id = :stockId ORDER BY m.createdDatetime DESC")
+    List<MarketPrice> findLatestByStockId(@Param("stockId") Integer stockId);
+}
+--------------------------------------------------
+
+5. StockRepository.java にメソッド追加（既に存在していれば不要）
+--------------------------------------------------
+Stock findByTicker(String ticker);
+--------------------------------------------------
+
+
+4444444
+===== src/main/java/controller/PositionController.java =====
+
+@Controller
+public class PositionController {
+
+    @Autowired
+    private PositionService positionService;
+
+    @GetMapping("/positions")
+    public String showPositions(Model model) {
+        model.addAttribute("positions", positionService.calculatePositions());
+        return "positions";
     }
 }
 
 
-===== FILE: /mnt/data/extracted_main/main/java/simplex/bn25/zhao102015/server/service/StockService.java =====
-
-package simplex.bn25.zhao102015.server.service;
-
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.http.HttpStatus;
-import org.springframework.stereotype.Service;
-import org.springframework.web.server.ResponseStatusException;
-import simplex.bn25.zhao102015.server.model.Stock;
-import simplex.bn25.zhao102015.server.model.repository.StockRepository;
-
-import java.util.List;
+===== src/main/java/service/PositionService.java =====
 
 @Service
-public class StockService {
-
-    private final StockRepository stockRepository;
+public class PositionService {
 
     @Autowired
-    public StockService(StockRepository stockRepository) {
-        this.stockRepository = stockRepository;
-    }
+    private TradeRepository tradeRepository;
 
-    public List<Stock> listAll() {
-        return stockRepository.findAll();
-    }
+    @Autowired
+    private MarketPriceRepository marketPriceRepository;
 
-    public Stock findByTicker(String ticker) {
-        return stockRepository.findByTicker(ticker)
-                .orElseThrow(() -> new ResponseStatusException(HttpStatus.NOT_FOUND, "No Ticker Found"));
-    }
+    public List<PositionDto> calculatePositions() {
+        List<Trade> trades = tradeRepository.findAllWithStock();
+        Map<Stock, List<Trade>> grouped = trades.stream().collect(Collectors.groupingBy(Trade::getStock));
 
-    public Stock findById(Integer id) {
-        return stockRepository.findById(id)
-                .orElseThrow(() -> new IllegalArgumentException("銘柄が見つかりません"));
-    }
+        List<PositionDto> result = new ArrayList<>();
 
-    public void registerNewStock(Stock stock) { stockRepository.register(stock); }
+        for (Stock stock : grouped.keySet()) {
+            List<Trade> stockTrades = grouped.get(stock);
+            PositionDto dto = new PositionDto(stock.getTicker(), stock.getName());
+
+            long quantity = 0;
+            BigDecimal totalBuy = BigDecimal.ZERO;
+            long totalBuyQty = 0;
+            BigDecimal realizedProfit = BigDecimal.ZERO;
+
+            for (Trade t : stockTrades) {
+                if (t.getSide() == Side.BUY) {
+                    quantity += t.getQuantity();
+                    totalBuy = totalBuy.add(t.getTradedPrice().multiply(BigDecimal.valueOf(t.getQuantity())));
+                    totalBuyQty += t.getQuantity();
+                } else {
+                    quantity -= t.getQuantity();
+                    if (totalBuyQty > 0) {
+                        BigDecimal avg = totalBuy.divide(BigDecimal.valueOf(totalBuyQty), 2, RoundingMode.HALF_UP);
+                        BigDecimal profit = (t.getTradedPrice().subtract(avg))
+                                .multiply(BigDecimal.valueOf(t.getQuantity()));
+                        realizedProfit = realizedProfit.add(profit);
+                    }
+                }
+            }
+
+            dto.quantity = quantity;
+            dto.avgPrice = (totalBuyQty > 0) ?
+                totalBuy.divide(BigDecimal.valueOf(totalBuyQty), 2, RoundingMode.HALF_UP) : null;
+            dto.realizedProfit = (realizedProfit.compareTo(BigDecimal.ZERO) == 0) ? null : realizedProfit;
+
+            MarketPrice mp = marketPriceRepository.findLatestByStockId(stock.getId());
+            if (mp != null) {
+                dto.marketPrice = mp.getMarketPrice();
+                if (quantity > 0 && dto.avgPrice != null) {
+                    dto.valuation = mp.getMarketPrice().multiply(BigDecimal.valueOf(quantity)).setScale(2, RoundingMode.HALF_UP);
+                    dto.unrealizedProfit = (mp.getMarketPrice().subtract(dto.avgPrice))
+                            .multiply(BigDecimal.valueOf(quantity)).setScale(2, RoundingMode.HALF_UP);
+                }
+            }
+
+            result.add(dto);
+        }
+
+        result.sort(Comparator.comparing(p -> p.ticker));
+        return result;
+    }
 }
 
 
-===== FILE: /mnt/data/extracted_main/main/java/simplex/bn25/zhao102015/server/service/TradeService.java =====
+===== src/main/java/dto/PositionDto.java =====
 
-package simplex.bn25.zhao102015.server.service;
+public class PositionDto {
+    public String ticker;
+    public String name;
+    public long quantity;
+    public BigDecimal avgPrice;
+    public BigDecimal realizedProfit;
+    public BigDecimal marketPrice;
+    public BigDecimal valuation;
+    public BigDecimal unrealizedProfit;
 
-import org.springframework.beans.factory.annotation.Autowired;
-import org.springframework.stereotype.Service;
-import simplex.bn25.zhao102015.server.controller.TradeInputDto;
-import simplex.bn25.zhao102015.server.model.Trade;
-import simplex.bn25.zhao102015.server.model.repository.TradeRepository;
-
-import java.sql.Timestamp;
-import java.util.List;
-
-@Service
-public class TradeService {
-
-    private final TradeRepository tradeRepository;
-
-    @Autowired
-    public TradeService(TradeRepository tradeRepository) {
-        this.tradeRepository = tradeRepository;
-    }
-
-    public List<Trade> findAll() {
-        return tradeRepository.findAll();
-    }
-
-    public void register(TradeInputDto input) {
-        Trade trade = new Trade();
-        trade.setStockId(input.getStockId());
-        trade.setTradedDatetime(Timestamp.valueOf(input.getTradedDatetime()));
-        trade.setSide(input.getSide());
-        trade.setQuantity(input.getQuantity());
-        trade.setTradedPrice(input.getTradedPrice());
-        tradeRepository.insert(trade);
+    public PositionDto(String ticker, String name) {
+        this.ticker = ticker;
+        this.name = name;
     }
 }
 
 
-===== FILE: /mnt/data/extracted_main/main/resources/templates/home.html =====
+===== src/main/java/repository/TradeRepository.java =====
+
+@Query("SELECT t FROM Trade t JOIN FETCH t.stock")
+List<Trade> findAllWithStock();
+
+
+===== src/main/java/repository/MarketPriceRepository.java =====
+
+@Query("SELECT m FROM MarketPrice m WHERE m.stock.id = :stockId ORDER BY m.createdDatetime DESC")
+List<MarketPrice> findLatestByStockId(@Param("stockId") Integer stockId);
+
+
+===== src/main/resources/templates/positions.html =====
 
 <!DOCTYPE html>
 <html xmlns:th="http://www.thymeleaf.org">
 <head>
     <meta charset="UTF-8">
-    <title>HelloWorld | trading-app</title>
+    <title>Positions</title>
+    <style>
+        th { text-align: center; }
+        td.right { text-align: right; }
+        td.left { text-align: left; }
+        .red { color: red; }
+        .green { color: green; }
+        .gray { color: gray; }
+    </style>
 </head>
 <body>
-<div th:replace="~{layouts :: header}"></div>
-
-<span th:text="${message}">メッセージがここに展開されます。</span>
-
-</body>
-</html>
-
-
-===== FILE: /mnt/data/extracted_main/main/resources/templates/layouts.html =====
-
-<div th:fragment="header" xmlns:th="http://www.thymeleaf.org">
-    <h1>trading-app-v2 by zhao102015</h1>
-    <nav>
-        <ul>
-            <li><a th:href="@{/}">Home</a></li>
-            <li><a th:href="@{/stocks}">Stocks</a></li>
-            <li><a th:href="@{/stocks/new}">Create Stock</a></li>
-            <li><a th:href="@{/trade}">Trade List</a></li>
-        </ul>
-    </nav>
-</div>
-
-
-===== FILE: /mnt/data/extracted_main/main/resources/templates/stocks/input.html =====
-
-<!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org">
-<head>
-  <meta charset="UTF-8">
-  <title>銘柄 登録</title>
-</head>
-<body>
-<div th:replace="~{layouts :: header}"></div>
-
-<form method="post" th:object="${input}">
-  <div>
-    <label for="ticker">Ticker</label>
-    <input type="text" id="ticker" th:field="*{ticker}" placeholder="xxxx" />
-    <div th:errors="*{ticker}"></div>
-  </div>
-
-  <div>
-    <label for="name">Name</label>
-    <input type="text" id="name" th:field="*{name}" placeholder="Xxx, Inc." />
-    <div th:errors="*{name}"></div>
-  </div>
-
-  <div>
-    <label for="exchangeMarket">Market</label>
-    <select id="exchangeMarket" th:field="*{exchangeMarket}">
-      <option th:each="market : ${T(simplex.bn25.zhao102015.server.model.Market).values()}"
-              th:value="${market}" th:text="${market.name()}"></option>
-    </select>
-    <div th:errors="*{exchangeMarket}"></div>
-  </div>
-
-  <div>
-    <label for="sharesIssued">Shares Issued</label>
-    <input type="number" id="sharesIssued" th:field="*{sharesIssued}" placeholder="1000000" />
-    <div th:errors="*{sharesIssued}"></div>
-  </div>
-
-  <div>
-    <input type="submit" value="登録" />
-  </div>
-</form>
-</body>
-</html>
-
-
-===== FILE: /mnt/data/extracted_main/main/resources/templates/stocks/list.html =====
-
-<!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org">
-<head>
-  <meta charset="UTF-8">
-  <title>銘柄一覧 | trading-app</title>
-  <style>
-    .cell-right {
-        text-align: right;
-    }
-  </style>
-</head>
-<body class="container">
-<div th:replace="~{layouts :: header}"></div>
-
-<table border="1" width="700">
-  <thead>
-  <tr>
-    <th style="text-align: center;">Ticker</th>
-    <th style="text-align: center;">Name</th>
-    <th style="text-align: center;">Market</th>
-    <th style="text-align: center;">Shares Issued</th>
-    <th style="text-align: center;">Input Trade</th>
-  </tr>
-  </thead>
-  <tbody>
-
-  <tr th:if="${#lists.isEmpty(stocks)}">
-    <td colspan="6" style="text-align: center;">データがありません。</td>
-  </tr>
-
-  <tr th:each="stock : ${stocks}">
-    <td style="text-align: center;" th:text="${stock.ticker}"></td>
-    <td style="text-align: center;" th:text="${stock.name}"></td>
-    <td style="text-align: center;" th:text="${stock.exchangeMarket}"></td>
-    <td style="text-align: right;" th:text="${#numbers.formatInteger(stock.sharesIssued, 0, 'COMMA')}"></td>
-    <td style="text-align: center;">
-      <a th:href="@{/trade/new(ticker=${stock.ticker})}" style="color: black; text-decoration: underline;">
-        Link
-      </a>
-    </td>
-  </tr>
-  </tbody>
-</table>
-
-
-</body>
-</html>
-
-
-===== FILE: /mnt/data/extracted_main/main/resources/templates/trades/input.html =====
-
-<!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org">
-<head>
-  <meta charset="UTF-8">
-  <title>Input Trade</title>
-</head>
-<body>
-<div>
-  <h2>Input Trade</h2>
-  <form novalidate method="post" th:object="${input}">
-    <input type="hidden" th:field="*{stockId}"/>
-    <input type="hidden" th:field="*{name}"/>
-
-    <div>
-      <label for="ticker">Ticker</label>
-      <input type="text" id="ticker" th:value="${input.ticker}" disabled/>
-    </div>
-
-    <div>
-      <span th:text="${input.name}"></span>
-    </div>
-
-    <div>
-      <label for="tradedDatetime">Traded Datetime</label>
-      <input type="datetime-local" id="tradedDatetime" th:field="*{tradedDatetime}" required/>
-      <div th:if="${#fields.hasErrors('tradedDatetime')}" th:errors="*{tradedDatetime}" style="color:red"></div>
-    </div>
-
-    <div>
-      <label>Side</label>
-      <input type="radio" id="buy" th:field="*{side}" value="BUY"/> Buy
-      <input type="radio" id="sell" th:field="*{side}" value="SELL"/> Sell
-      <div th:if="${#fields.hasErrors('side')}" th:errors="*{side}" style="color:red"></div>
-    </div>
-
-    <div>
-      <label for="quantity">Quantity</label>
-      <input type="number" id="quantity" th:field="*{quantity}" step="100" required/>
-      <div th:if="${#fields.hasErrors('quantity')}" th:errors="*{quantity}" style="color:red"></div>
-    </div>
-
-    <div>
-      <label for="tradedPrice">Traded Price</label>
-      <input type="number" id="tradedPrice" th:field="*{tradedPrice}" step="0.01" required/>
-      <div th:if="${#fields.hasErrors('tradedPrice')}" th:errors="*{tradedPrice}" style="color:red"></div>
-    </div>
-
-    <div>
-      <input type="submit" value="Register"/>
-    </div>
-  </form>
-</div>
-</body>
-</html>
-
-===== FILE: /mnt/data/extracted_main/main/resources/templates/trades/list.html =====
-
-<!DOCTYPE html>
-<html xmlns:th="http://www.thymeleaf.org">
-<head>
-  <meta charset="UTF-8">
-  <title>Trade List</title>
-</head>
-<body>
-<div>
-  <h1>trading-app-v2 by zhao102015</h1>
-  <nav>
-    <ul>
-      <li><a href="/">Home</a></li>
-      <li><a href="/stocks">Stocks</a></li>
-      <li><a href="/stocks/new">Create Stock</a></li>
-      <li><a href="/trade">Trade List</a></li>
-    </ul>
-  </nav>
-</div>
-<div>
-
-  <table border="1" width="1000">
+<h1>Positions</h1>
+<table border="1">
     <thead>
-    <tr>
-      <th style="text-align: center;">Traded Datetime</th>
-      <th style="text-align: center;">Ticker</th>
-      <th style="text-align: center;">Name</th>
-      <th style="text-align: center;">Side</th>
-      <th style="text-align: center;">Quantity</th>
-      <th style="text-align: center;">Traded Price</th>
-    </tr>
+        <tr>
+            <th>Ticker</th>
+            <th>Name</th>
+            <th>Quantity</th>
+            <th>Average Unit Price</th>
+            <th>Realized P/L</th>
+            <th>Market Price</th>
+            <th>Valuation</th>
+            <th>Unrealized P/L</th>
+        </tr>
     </thead>
     <tbody>
-
-    <tr th:if="${#lists.isEmpty(trades)}">
-      <td colspan="6" style="text-align: center;">データがありません。</td>
-    </tr>
-
-
-    <tr th:each="trade : ${trades}" th:unless="${#lists.isEmpty(trades)}">
-      <td th:text="${#dates.format(trade.tradedDatetime, 'yyyy/MM/dd HH:mm')}" style="text-align: center;" ></td>
-      <td th:text="${trade.ticker}" style="text-align: center;" ></td>
-      <td th:text="${trade.name}" style="text-align: center;" ></td>
-      <td th:text="${#strings.capitalize(trade.side.name().toLowerCase)}"  style="text-align: center;"></td>
-      <td th:text="${#numbers.formatInteger(trade.quantity, 0, 'COMMA')}" style="text-align: right;"></td>
-      <td th:text="${#numbers.formatDecimal(trade.tradedPrice, 1, 'COMMA', 2, 'POINT')}" style="text-align: right;"></td>
-    </tr>
+        <tr th:each="pos : ${positions}">
+            <td class="left" th:text="${pos.ticker}"></td>
+            <td class="left" th:text="${pos.name}"></td>
+            <td class="right" th:text="${pos.quantity}"></td>
+            <td class="right" th:text="${pos.avgPrice != null ? pos.avgPrice : 'N/A'}"></td>
+            <td class="right"
+                th:classappend="${pos.realizedProfit > 0 ? 'red' : (pos.realizedProfit < 0 ? 'green' : 'gray')}"
+                th:text="${pos.realizedProfit != null ? pos.realizedProfit : 'N/A'}"></td>
+            <td class="right" th:text="${pos.marketPrice != null ? pos.marketPrice : 'N/A'}"></td>
+            <td class="right"
+                th:classappend="${pos.valuation > 0 ? 'red' : (pos.valuation == 0 ? 'gray' : '')}"
+                th:text="${pos.valuation != null ? pos.valuation : 'N/A'}"></td>
+            <td class="right"
+                th:classappend="${pos.unrealizedProfit > 0 ? 'red' : (pos.unrealizedProfit < 0 ? 'green' : 'gray')}"
+                th:text="${pos.unrealizedProfit != null ? pos.unrealizedProfit : 'N/A'}"></td>
+        </tr>
     </tbody>
-  </table>
-</div>
+</table>
 </body>
 </html>
-
