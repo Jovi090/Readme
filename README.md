@@ -1,3 +1,94 @@
+Spring Boot 取引一覧フィルター機能追加
+
+この実装は、/trade ページに以下のフィルター機能を追加します：
+
+- Ticker 入力（部分一致、任意入力）
+- 日付選択（ALL または Today）
+- 検索ボタン（フィルター）
+
+---
+
+## 【1】TradeController.java
+
+```java
+@GetMapping("/trade")
+public String listTrades(
+        @RequestParam(name = "ticker", required = false) String ticker,
+        @RequestParam(name = "date", required = false, defaultValue = "all") String date,
+        Model model) {
+    boolean filterByTicker = (ticker != null && !ticker.isEmpty());
+    boolean filterByToday = "today".equalsIgnoreCase(date);
+
+    List<Trade> trades;
+    if (!filterByTicker && !filterByToday) {
+        trades = tradeRepository.findAll();
+    } else if (!filterByTicker) {
+        trades = tradeRepository.findByTradeDate(LocalDate.now());
+    } else if (!filterByToday) {
+        trades = tradeRepository.findByTickerContaining(ticker);
+    } else {
+        trades = tradeRepository.findByTickerContainingAndTradeDate(ticker, LocalDate.now());
+    }
+
+    model.addAttribute("trades", trades);
+    model.addAttribute("tickerFilter", ticker == null ? "" : ticker);
+    model.addAttribute("dateFilter", date);
+
+    return "trades/list";
+}
+```
+
+---
+
+## 【2】TradeRepository.java
+
+```java
+public interface TradeRepository extends JpaRepository<Trade, Long> {
+    List<Trade> findByTickerContaining(String ticker);
+    List<Trade> findByTradeDate(LocalDate date);
+    List<Trade> findByTickerContainingAndTradeDate(String ticker, LocalDate date);
+}
+```
+
+---
+
+## 【3】templates/trades/list.html の上部に以下を追加
+
+```html
+<form th:action="@{/trade}" method="get" style="margin-bottom:1em;">
+  <div>
+    <label for="tickerInput">Ticker:</label>
+    <input type="text" id="tickerInput" name="ticker"
+           th:value="${tickerFilter}" placeholder="Ticker" />
+  </div>
+  <div>
+    <label>Date:</label>
+    <input type="radio" id="dateAll" name="date" value="all"
+           th:checked="${dateFilter == null or dateFilter.equals('all')}" />
+    <label for="dateAll">ALL</label>
+    <input type="radio" id="dateToday" name="date" value="today"
+           th:checked="${dateFilter != null and dateFilter.equals('today')}" />
+    <label for="dateToday">Today</label>
+  </div>
+  <button type="submit" class="btn btn-success">フィルター</button>
+</form>
+```
+
+---
+
+## 【4】No Data 表示維持
+
+既存の `th:if="${#lists.isEmpty(trades)}"` の行はそのままで OK。
+
+---
+
+## 【5】補足
+
+- `Trade` に `ticker` フィールドが必要
+- `Trade` に `tradeDate`（LocalDate型）または `tradedDatetime`（Timestamp型）が必要
+- LocalDateTime 型なら `.toLocalDate()` で変換する必要あり
+
+
 ===== 【機能①】取引一覧画面 フィルター機能 =====
 
 1. TradeController.java
