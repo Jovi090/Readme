@@ -1,3 +1,1047 @@
+文件结构:
+
+event_editor_extracted/
+    EventEditor.css
+    DraggableEvents.tsx
+    calendar.css
+    EventEditor.tsx
+    draggable-events.css
+    Calendar.tsx
+
+
+文件: EventEditor.css
+===================
+.inline-edit-panel {
+  background-color: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  width: 300px;
+  padding: 10px;
+}
+
+.inline-edit-panel .panel-content {
+  padding: 10px;
+}
+
+.inline-edit-panel .form-group {
+  margin-bottom: 15px;
+}
+
+.inline-edit-panel .form-group label {
+  font-size: 0.9rem;
+}
+
+.inline-edit-panel .form-group input,
+.inline-edit-panel .form-group select {
+  padding: 8px;
+  font-size: 0.9rem;
+}
+
+.inline-edit-panel .panel-actions {
+  margin-top: 15px;
+  padding-top: 10px;
+}
+
+.inline-edit-panel .panel-actions button {
+  padding: 6px 12px;
+  font-size: 0.9rem;
+}
+.read-only-input {
+  background-color: #e0e0e0;
+  color: #333; 
+  border: 1px solid #ccc;
+  padding: 8px 12px;
+  border-radius: 4px;
+  width: 100%;
+  box-sizing: border-box;
+  cursor: not-allowed;
+  font-weight: bold; 
+}
+
+.department-input {
+  background-color: #555; 
+  color: white; 
+  border: 1px solid #333;
+}
+.panel-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  margin-top: 20px;
+  padding-top: 15px;
+  border-top: 1px solid #eee;
+}
+
+.close-btn {
+  padding: 8px 16px;
+  background-color: #fff;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  color: #555;
+  cursor: pointer;
+}
+
+.save-btn {
+  padding: 8px 16px;
+  background-color: #4285f4;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.save-btn:hover {
+  background-color: #3367d6;
+}
+.editable-field {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid #ddd;
+  border-radius: 4px;
+  font-size: 1rem;
+  box-sizing: border-box;
+}
+
+.editable-field:focus {
+  border-color: #4285f4;
+  outline: none;
+}
+
+
+.delete-btn {
+  background-color: #ff4444;
+  color: white;
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+
+
+文件: DraggableEvents.tsx
+=======================
+import React, { useEffect } from 'react';
+import { Draggable } from '@fullcalendar/interaction';
+import '../styles/draggable-events.css'; // CSS をインポート
+
+const DraggableEvents: React.FC = () => {
+  useEffect(() => {
+    let containerEl = document.getElementById('external-events');
+    const draggable = new Draggable(containerEl, {
+      itemSelector: '.fc-event',
+      clone: true, 
+      removeAfterDrop: true, 
+      eventData: (eventEl) => {
+         const data = JSON.parse(eventEl.getAttribute('data-event') || '{}');
+        return {
+          title: data.title,
+          backgroundColor: data.backgroundColor,
+          extendedProps: {
+            department: data.department
+          }
+        };
+}
+    });
+    return () => draggable.destroy();
+  }, []);
+
+return (
+   <div id="external-events-container">
+    <p><strong>イベントをカレンダーにドラッグ</strong></p>
+    <div id="external-events">
+    <div className="fc-event event-a" data-event='{"title":"会議A","department":"HR1","backgroundColor":"#3788d8"}'>会議A</div>
+    <div className="fc-event event-b" data-event='{"title":"研修B","department":"HR2","backgroundColor":"#43a047"}'>研修B</div>
+    <div className="fc-event event-c" data-event='{"title":"打ち合わせC","department":"HR3","backgroundColor":"#ff9800"}' >打ち合わせC</div>
+    <div className="fc-event event-d" data-event='{"title":"プレゼンテーションD","department":"HR4","backgroundColor":"#e53935"}' >プレゼンテーションD</div>
+    <div className="fc-event event-e" data-event='{"title":"ワークショップE","department":"HR5","backgroundColor":"#8e24aa"}'>ワークショップE</div>
+    <div className="fc-event event-f" data-event='{"title":"セミナーF","department":"HR6","backgroundColor":"#00838f"}' >セミナーF</div>
+  </div>
+  </div>
+);
+}
+
+export default DraggableEvents;
+
+文件: calendar.css
+================
+.fc-saveBtn-button {
+  background: #4caf50 !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 4px !important;
+  margin-right: 8px;
+}
+
+.fc-updateBtn-button {
+  background: #2196f3 !important;
+  color: #fff !important;
+  border: none !important;
+  border-radius: 4px !important;
+  margin-right: 16px;
+}
+
+/* メインコンテナ：flexレイアウトを使用 */
+.calendar-container {
+  position: relative; /* ゴミ箱の絶対位置用 */
+  /* display: flex;
+  flex-direction: column; */
+  height: 80vh;
+  
+}
+
+.calendar-wrapper {
+  position: relative; /* ゴミ箱の位置 */
+  background: #fff;
+  padding-bottom: 50px;
+  border-radius: 4px;
+  height: 80%;
+  overflow: hidden;
+}
+
+
+/* ゴミ箱エリアのスタイル */
+.trash-bin {
+  margin-top: 20px;
+  position: absolute;
+  right: 20px;
+  bottom: 20px;
+  padding: 8px 16px;
+  background: #f5f5f5;
+  border: 1px solid #e0e0e0; 
+  border-radius: 20px;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.3s ease;
+  z-index: 100;
+  box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+}
+
+/* ゴミ箱アイコンのスタイル */
+.trash-icon {
+  color: #666;
+  font-size: 18px;
+  transition: all 0.3s ease;
+}
+
+/* テキスト表示スタイル */
+.trash-bin span {
+  font-size: 14px;
+  color: #666;
+  /* 加个过渡动画,自然点 */
+  transition: all 0.2s ease;
+}
+
+/* ドラッグオーバー時のスタイル */
+.trash-bin.drag-over {
+  background: #ffffff;
+   border-color: #f44336;
+}
+
+.trash-bin.drag-over .trash-icon {
+  color: #f44336;
+  transform: scale(1.2);
+}
+
+.trash-bin.drag-over span {
+  color: #f44336;
+  background: rgba(244, 67, 54, 0.1);
+}
+
+.custom-confirm-modal {
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1000;
+  overflow: visible;
+}
+
+.confirm-modal-content {
+  background-color: white;
+  padding: 20px;
+  border-radius: 8px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.2);
+  max-width: 400px;
+  width: 100%;
+}
+
+.confirm-buttons {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 20px;
+  gap: 10px;
+}
+
+.confirm-buttons button {
+  padding: 8px 16px;
+  border: none;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.confirm-buttons button:first-child {
+  background-color: #f44336;
+  color: white;
+}
+
+.confirm-buttons button:last-child {
+  background-color: #e0e0e0;
+}
+
+
+/* 事件样式,新增省略号状态 */
+.fc-event {
+  white-space: nowrap;
+  overflow: visible;
+  position: relative;
+}
+
+.fc-event-inner {
+  display: block;
+  text-overflow: ellipsis; 
+  overflow: hidden;
+  width: 100%;
+}
+
+
+
+.fc-event-container {
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+.fc-event-main {
+  height: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 浮窗大框的样式 */
+.fc-custom-tooltip {
+  position: fixed;
+  background: white;
+  border-radius: 6px;
+  padding: 12px;
+  box-shadow: 0 3px 10px rgba(0,0,0,0.15);
+  border: 1px solid #e0e0e0;
+  z-index: 9999; 
+  min-width: 200px;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.2s ease;
+  pointer-events: none;
+  /* 这个位置是随便试出来的，可能需要科学改一下*/
+  transform: translate(-220%, -80%); 
+}
+
+
+/* 小三角 */
+.fc-custom-tooltip::after {
+  content: '';
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  border-width: 8px;
+  border-style: solid;
+  border-color: white transparent transparent transparent;
+}
+
+/* 内部的样式 */
+.tooltip-header {
+  font-weight: bold;
+  margin-bottom: 6px;
+  color: #333;
+}
+
+.tooltip-body {
+  font-size: 13px;
+  color: #666;
+}
+
+.tooltip-meta {
+  font-size: 12px;
+  color: #888;
+  padding-top: 6px;
+  margin-top: 6px;
+  border-top: 1px dashed #eee;
+}
+.fc-col-header-cell {
+  visibility: visible !important;
+}
+
+文件: EventEditor.tsx
+===================
+import React, { useState, useRef, useEffect } from 'react';
+import '../styles/EventEditor.css';
+
+// イベントの型定義
+interface CalendarEvent {
+  id: string;
+  title: string;
+  el?: HTMLElement;
+  extendedProps: {
+    department: string;
+    instructor: string;
+    duration: string;
+    location: string;
+  };
+}
+
+interface EventEditProps {
+  event: CalendarEvent;
+  onClose: () => void;
+  onSave: (updatedEvent: CalendarEvent) => void;
+  onDelete: (eventId: string) => void;
+  resources: Array<{
+    id: string;
+    title: string;
+    department: string;
+    instructor: string;
+    duration: string;
+    location: string;
+  }>;
+}
+
+const EventEdit: React.FC<EventEditProps> = ({ 
+  event, 
+  onClose, 
+  onSave, 
+}) => {
+  // フォーム状態をまとめて管理。気になるなら別ファイルで状態管理するのもアリ
+  const [formData, setFormData] = useState({
+    title: event?.title || '',
+    department: event?.extendedProps.department || '',
+    instructor: event?.extendedProps.instructor || '',
+    duration: event?.extendedProps.duration || '',
+    location: event?.extendedProps.location || ''
+  });
+
+  const editRef = useRef<HTMLDivElement>(null);
+
+  // 入力の変化をまとめて処理
+  const handleInputChange = (field: keyof typeof formData) => 
+    (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+      console.log('入力確認:', field, e.target.value); 
+      setFormData(prev => ({
+        ...prev,
+        [field]: e.target.value
+      }));
+      console.log("現在のフォームデータ:", formData);
+    };
+
+  // 外部クリックで閉じる
+  useEffect(() => {
+    const handleClickOutside = (e: MouseEvent) => {
+      if (editRef.current && !editRef.current.contains(e.target as Node)) {
+        onClose();
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [onClose]);
+
+  // 保存処理
+  const handleSave = () => {
+    const updatedEvent = {
+      ...event,
+      title: formData.title,
+      extendedProps: {
+        department: formData.department,
+        instructor: formData.instructor, // 确保即使为空也更新
+        duration: formData.duration,
+        location: formData.location
+      }
+    };
+    onSave(updatedEvent);
+  };
+
+  // ポップアップの位置を計算
+  const getPopupStyle = () => {
+    const eventRect = event?.el?.getBoundingClientRect();
+    return {
+      position: 'fixed' as const,
+      left: eventRect?.left,
+      top: eventRect?.bottom,
+      zIndex: 1000
+    };
+  };
+
+  return (
+    <div className="inline-edit-panel" style={getPopupStyle()} ref={editRef}>
+      <div className="panel-content">
+        <h3>詳細表示</h3>
+
+        {/* 読み取り専用フィールド */}
+        <div className="form-group">
+          <label>カリキュラム名</label>
+          <input 
+            type="text" 
+            value={formData.title} 
+            className="read-only-input" 
+            readOnly 
+          />
+        </div>
+
+        <div className="form-group">
+          <label>担当部署</label>
+          <input 
+            type="text" 
+            value={formData.department} 
+            className="read-only-input" 
+            readOnly 
+          />
+        </div>
+
+        {/* 編集可能フィールド */}
+        <div className="form-group">
+          <label>担当講師</label>
+          <input 
+            className="editable-field" 
+            type="text" 
+            value={formData.instructor} 
+            onChange={handleInputChange('instructor')}
+          />
+        </div>
+
+        <div className="form-group">
+          <label>所要時間</label>
+          <input 
+            className="editable-field" 
+            type="text" 
+            value={formData.duration} 
+            onChange={handleInputChange('duration')}
+          />
+        </div>
+
+        <div className="form-group">
+          <label>会場</label>
+          <select 
+            className="editable-field" 
+            value={formData.location} 
+            onChange={handleInputChange('location')}
+          >
+            <option value="">選択してください</option>
+            <option value="A会場">A会場</option>
+            <option value="B会場">B会場</option>
+            <option value="C会場">C会場</option>
+          </select>
+        </div>
+
+        {/* 操作ボタン */}
+        <div className="panel-actions">
+          <button className="close-btn" onClick={onClose}>閉じる</button>
+          <button className="save-btn" onClick={handleSave}>登録</button>
+        </div>
+      </div>
+    </div>
+  );
+};
+
+export default EventEdit;
+
+文件: draggable-events.css
+========================
+#external-events {
+  padding: 10px;
+  width: 200px;
+  background: #eee;
+  border-radius: 4px;
+}
+
+.fc-event{
+  /* 固定高度 */
+  height: 25px;
+}
+
+#external-events .fc-event.event-a {
+  margin: 10px 0;
+  padding: 5px;
+  background: #3788d8;
+  color: white;
+  cursor: pointer;
+  border-radius: 3px;
+}
+#external-events .fc-event.event-b {
+  margin: 10px 0;
+  padding: 5px;
+  background: #43a047;
+  color: white;
+  cursor: pointer;
+  border-radius: 3px;
+}
+#external-events .fc-event.event-c {
+  margin: 10px 0;
+  padding: 5px;
+  background: #ff9800;
+  color: white;
+  cursor: pointer;
+  border-radius: 3px;
+}
+#external-events .fc-event.event-d {
+  margin: 10px 0;
+  padding: 5px;
+  background: #e53935;
+  color: white;
+  cursor: pointer;
+  border-radius: 3px;
+}
+#external-events .fc-event.event-e {
+  margin: 10px 0;
+  padding: 5px;
+  background: #8e24aa;
+  color: white;
+  cursor: pointer;
+  border-radius: 3px;
+}
+#external-events .fc-event.event-f {
+  margin: 10px 0;
+  padding: 5px;
+  background: #00838f;
+  color: white;
+  cursor: pointer;
+  border-radius: 3px;
+}
+
+#external-events-container {
+  padding: 10px;
+  background: #f8f9fa;
+  border-radius: 5px;
+  margin-bottom: 20px;
+  max-height: 100vh; 
+  display: flex;
+  flex-direction: column;
+}
+
+/* スクロールバー関連 */
+#external-events {
+  overflow-y: auto;
+  flex-grow: 1; 
+}
+#external-events::-webkit-scrollbar {
+  width: 8px;
+}
+
+#external-events::-webkit-scrollbar-track {
+  background: #f1f1f1;
+  border-radius: 4px;
+}
+
+#external-events::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: 4px;
+}
+
+#external-events::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+
+文件: Calendar.tsx
+================
+import React, { useState,useRef } from 'react';
+import FullCalendar from '@fullcalendar/react';
+import resourceTimelinePlugin from '@fullcalendar/resource-timeline';
+import interactionPlugin from '@fullcalendar/interaction';
+import EventEdit from './EventEditor';
+import '../styles/calendar.css';
+import { FaTrashAlt } from 'react-icons/fa'; // ゴミ箱アイコンを読み込む
+import { ToastContainer, toast } from 'react-toastify';
+import 'react-toastify/dist/ReactToastify.css';
+import jaLocale from '@fullcalendar/core/locales/ja';
+
+
+const Calendar: React.FC = () => {
+  // 状態管理：すべてのイベント、選択されたイベント、編集パネルの表示状態を制御する。データ取得・更新、setXXXXXXで再レンダリング。ローカル保存によるデータ共有が可能（ブラウザを閉じるまで保持）。
+  const [events, setEvents] = useState<any[]>([]);
+  // 現在選択されているイベントの情報
+  const [selectedEventInfo, setSelectedEventInfo] = useState<{
+    eventObj: any; // FullCalendar のネイティブイベントオブジェクト
+    plainObject: any; // 通常のオブジェクト形式
+  } | null>(null);
+  // 編集パネルの表示・非表示を制御
+  const [showEdit, setShowEdit] = useState(false);
+  // ゴミ箱DOM要素の参照を取得
+  const trashBinRef = useRef<HTMLDivElement>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [eventToDelete, setEventToDelete] = useState<any>(null);
+  // ゴミ箱にドラッグされたときのホバー状態を制御
+  const [isDraggingOver, setIsDraggingOver] = useState(false);
+  // 改浮窗里的结束时间加个状态
+  const [TooltipEvents,setTooltipEvents] = useState<{[key: string]: {start: Date, end: Date}}>({});
+
+
+  const resources = [
+    { id: 'a', title: 'Group A' },
+    { id: 'b', title: 'Group B' },
+    { id: 'c', title: 'Group C' },
+    { id: 'd', title: 'Group D' },
+    { id: 'e', title: 'Group E' },
+    { id: 'f', title: 'Group F' },
+  ];
+
+  // イベントクリック時
+  const handleEventClick = (clickInfo: any) => {
+    console.log("クリックされたイベントのデータを確認する：",clickInfo.event);
+    // 取得したデータを状態にセットする
+    setSelectedEventInfo({
+      eventObj: clickInfo.event,
+      plainObject: {
+        id: clickInfo.event.id,
+        title: clickInfo.event.title,
+        start: clickInfo.event.start,
+        end: clickInfo.event.end,
+        resourceId: clickInfo.event.resourceId,
+        // カスタム属性（FullCalendar標準でないもの）。上記は標準プロパティ
+        extendedProps: {
+          department: clickInfo.event.extendedProps?.department,
+          // 初期値は空。設定データを取得してからここを更新する必要がある
+          instructor: clickInfo.event.extendedProps?.instructor || '',
+          duration: clickInfo.event.extendedProps?.duration || '',
+          location: clickInfo.event.extendedProps?.location || ''
+        },
+        el: clickInfo.el
+      } 
+    });
+    // クリックでポップアップを表示
+    setShowEdit(true);
+  };
+
+  // ドロップして新しいイベントを作成し、データを受け取る
+  const handleEventReceive = (info: any) => {
+    console.log("ドロップ後のイベントデータを確認する：",info);
+
+    const newEvent = {
+        id: String(Date.now()),
+        title: info.event.title,
+        start: info.event.start,
+        end: info.event.end,
+        extendedProps: { 
+          department: info.event.extendedProps?.department,
+          // 初期値は空。設定データを取得してからここを更新する必要がある
+          instructor: info.event.extendedProps?.instructor || '',
+          duration: info.event.extendedProps?.duration || '',
+          location: info.event.extendedProps?.location || ''
+        }
+    }
+    // シャローコピーで状態を変更しない。settings 側には影響しない
+    setEvents([...events, newEvent]);
+  };
+
+  // イベントのプロパティを更新。フォームが変更されたらここも更新する必要がある
+  const handleUpdateEvent = (updatedEvent: any) => {
+    // 消除原先的eventObj报错,排除null的情况
+    if (!selectedEventInfo) return;
+    const { eventObj } = selectedEventInfo;
+    eventObj.setProp('title', updatedEvent.title);
+    eventObj.setExtendedProp('department', updatedEvent.extendedProps.department);
+    eventObj.setExtendedProp('instructor', updatedEvent.extendedProps.instructor);
+    eventObj.setExtendedProp('duration', updatedEvent.extendedProps.duration);
+    eventObj.setExtendedProp('location', updatedEvent.extendedProps.location);
+
+    // ローカルの events ステートを更新する
+    setEvents(prevEvents => 
+      prevEvents.map(event => 
+        event.id === updatedEvent.id 
+          ? { 
+              ...event, 
+              title: updatedEvent.title,
+              extendedProps: {
+                ...event.extendedProps,
+                ...updatedEvent.extendedProps
+              }
+            } 
+          : event
+      )
+    );
+    // ポップアップを閉じる
+    setShowEdit(false);
+  };
+
+  // 要素がゴミ箱エリア内にあるかチェックする
+  // const isInTrashBin = (element: HTMLElement) => {
+  //   if (!trashBinRef.current) return false;
+  //   // ゴミ箱と要素の境界情報を取得する
+  //   const trashRect = trashBinRef.current.getBoundingClientRect();
+  //   const elementRect = element.getBoundingClientRect();
+  //   // 要素がゴミ箱と重なっているかどうかを判断する
+  //   return !(
+  //     elementRect.right < trashRect.left ||  // 要素がゴミ箱の左側にある
+  //     elementRect.left > trashRect.right ||  // 要素がゴミ箱の右側にある
+  //     elementRect.bottom < trashRect.top ||  // 要素がゴミ箱の上にある
+  //     elementRect.top > trashRect.bottom    // 要素がゴミ箱の下にある
+  //   );
+  // };
+
+
+const handleEventDragStart = ( ) => {   
+    setIsDraggingOver(true);
+  };
+
+
+  // イベントのドラッグが終了したときの処理関数
+  const handleEventDragStop = (info: any) => {   
+    // setIsDraggingOver(true);
+    const target = info.jsEvent.target;
+    // 检查目标是否在垃圾箱框内,contains用来判断target是否在垃圾桶的dom容器里
+    if (trashBinRef.current?.contains(target)) {
+      setEventToDelete(info.event);
+      setShowDeleteConfirm(true);
+    }
+     setIsDraggingOver(false)
+  };
+
+  // イベントの削除を確認する
+  const confirmDelete = () => {
+    if (eventToDelete) {
+      eventToDelete.remove();
+      setEvents(prev => prev.filter(e => e.id !== eventToDelete.id));
+    }
+    setShowDeleteConfirm(false);
+    setEventToDelete(null);
+    setIsDraggingOver(false);
+  };
+
+  // 削除をキャンセルする
+  const cancelDelete = () => {
+    setShowDeleteConfirm(false);
+    setEventToDelete(null);
+    setIsDraggingOver(false);
+  };
+
+  // フォームがすべて入力されているか確認する
+  const checkFormComplete = (eventData: any) => {
+
+  const props = eventData.extendedProps || {};
+  return (
+    (eventData.instructor || props.instructor) &&
+    (eventData.duration || props.duration) &&
+    (eventData.location || props.location)
+  );
+};
+
+  // Save ボタンをクリックしたときの処理
+  const handleSaveClick = () => {
+    if (!selectedEventInfo) return;
+    const isComplete = checkFormComplete(selectedEventInfo.plainObject.extendedProps);
+    console.log(selectedEventInfo.plainObject.extendedProps);  
+    if (!isComplete) {
+      toast.warning('未入力項目があります', {
+        position: "top-center",
+        autoClose: 3000,
+      });
+    } else {
+      toast.success('保存が完了しました', {
+        position: "top-center",
+        autoClose: 2000,
+      });
+    }
+  };
+
+// 拖拽事件长度后的时间变化
+  const handleEventResize = (resizeInfo: any) => {
+  const event = resizeInfo.event;
+  
+  // 更新工具提示的时间状态
+  setTooltipEvents(prev => ({
+    ...prev,
+    [event.id]: {
+      start: event.start,
+      end: event.end
+    }
+  }));
+};
+
+  return (
+    <div className="calendar-container">
+        {/* ゴミ箱エリア */}
+      <div 
+        ref={trashBinRef}
+        className={`trash-bin ${isDraggingOver ? 'drag-over' : ''}`}
+      >
+        <FaTrashAlt className="trash-icon" />
+        <span>削除するにはここにドラッグ</span>
+      </div>
+          <ToastContainer 
+        position="top-center"
+        autoClose={3000}
+        hideProgressBar
+        newestOnTop
+        closeOnClick
+        pauseOnFocusLoss
+        draggable
+        pauseOnHover
+      />
+      <div className="calendar-wrapper">
+        <FullCalendar
+          locale="ja" // 设置日语
+          locales={[jaLocale]} // 导入日语
+          schedulerLicenseKey="GPL-My-Project-Is-Open-Source"
+          plugins={[resourceTimelinePlugin, interactionPlugin]}
+          initialView="resourceTimelineDay"
+          eventResize={handleEventResize}
+          editable={true}
+          droppable={true}
+          eventDragStart={handleEventDragStart}
+          firstDay={1}
+          resources={resources}
+          events={[]}
+          eventMaxStack={2}
+          eventReceive={handleEventReceive}
+          eventClick={handleEventClick}
+          eventDragStop={handleEventDragStop}
+          height="100%"
+          headerToolbar={{
+            left: 'today,prev,next',
+            center: 'title',
+            right: 'saveBtn updateBtn resourceTimelineDay,resourceTimelineWeek,resourceTimelineMonth'
+          }}
+          customButtons={{
+            today: {
+              text: 'Today'
+            },
+            saveBtn: {
+              text: 'Save',
+              click: handleSaveClick,
+            },
+            updateBtn: {
+              text: 'Update',
+               click: () => {
+                toast.success('更新が完了しました', {
+                  position: "top-center",
+                  autoClose: 2000,
+                  hideProgressBar: true,
+                  closeOnClick: true,
+                  pauseOnHover: true,
+                  draggable: true,
+                  progress: undefined,
+                });
+              }
+            }
+          }}
+          views={{
+            resourceTimelineDay: { buttonText: 'Day' },
+            resourceTimelineWeek: { buttonText: 'Week' },
+            resourceTimelineMonth: {
+                buttonText: 'Month',
+                dayHeaderFormat: { // 日期头部格式
+                  weekday: 'short', 
+                  day: 'numeric'   
+                },
+                dayHeaders: true,  
+                type: 'resourceTimeline',
+                duration: { weeks: 1},  //一周一单位
+                slotDuration: { days: 1 }, // 每天一个slot独立开
+                slotLabelFormat: [ // 两行显示
+                  { 
+                    month: 'short', 
+                    year: 'numeric' 
+                  },
+                  { 
+                    weekday: 'short', 
+                    day: 'numeric' ,
+                  }
+                ]
+              }
+          }}
+           eventContent={(arg) => ({
+              html: `
+                <div class="fc-event-container">
+                  <div class="fc-event-main">${arg.event.title}</div>
+                </div>
+              `
+            })}
+            eventDidMount={(arg) => {
+            const eventEl = arg.el;
+            const formatTime = (date) => date?.toLocaleTimeString([], {
+              hour: '2-digit',
+              minute: '2-digit',
+              hour12: false
+            })||'未設定' ;
+
+            // 创建工具提示元素
+            const tooltip = document.createElement('div');
+            tooltip.className = 'fc-custom-tooltip';
+            tooltip.innerHTML = `
+              <div class="tooltip-header">
+                <strong>${arg.event.title}</strong>
+              </div>
+              <div class="tooltip-body">
+                <div>${formatTime(arg.event.start)} → ${formatTime(arg.event.end)}</div>
+                ${arg.event.extendedProps.department ? `
+                  <div class="tooltip-meta">担当部署: ${arg.event.extendedProps.department}</div>
+                ` : ''}
+              </div>
+            `;
+
+            // 添加到事件元素
+            eventEl.appendChild(tooltip);
+
+            // 鼠标事件处理
+            const showTooltip = () => {
+              tooltip.style.opacity = '1';
+              tooltip.style.visibility = 'visible';
+            };
+            
+            const hideTooltip = () => {
+              tooltip.style.opacity = '0';
+              tooltip.style.visibility = 'hidden';
+            };
+
+            eventEl.addEventListener('mouseenter', showTooltip);
+            eventEl.addEventListener('mouseleave', hideTooltip);
+
+            // 确保在组件卸载时清理
+            return () => {
+              eventEl.removeEventListener('mouseenter', showTooltip);
+              eventEl.removeEventListener('mouseleave', hideTooltip);
+            };
+          }}
+        />   
+      {showDeleteConfirm && (
+        <div className="custom-confirm-modal">
+          <div className="confirm-modal-content">
+            <h3>イベントの削除</h3>
+            <p>このイベントを削除してもよろしいですか？</p>
+            <div className="confirm-buttons">
+              <button onClick={confirmDelete}>はい</button>
+              <button onClick={cancelDelete}>いいえ</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* イベント編集パネル */}
+      {showEdit && selectedEventInfo && (
+        <EventEdit
+          event={selectedEventInfo.plainObject}
+          onClose={() => setShowEdit(false)}
+          onSave={handleUpdateEvent}
+          resources={resources}
+        />
+      )}
+    </div>
+    </div>
+  );
+};
+
+export default Calendar;
+
+
+
+
+
+
 import React from 'react';
 import FullCalendar from '@fullcalendar/react';
 import resourceTimelinePlugin from '@fullcalendar/resource-timeline';
