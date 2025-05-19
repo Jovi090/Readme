@@ -1,3 +1,77 @@
+import React from 'react';
+import FullCalendar from '@fullcalendar/react';
+import resourceTimelinePlugin from '@fullcalendar/resource-timeline';
+import interactionPlugin from '@fullcalendar/interaction';
+
+export default function MyCalendar() {
+  return (
+    <FullCalendar
+      plugins={[resourceTimelinePlugin, interactionPlugin]}
+      initialView="resourceTimelineMonth"
+      schedulerLicenseKey="GPL-My-Project-Is-Open-Source"
+      views={{
+        resourceTimelineMonth: {
+          slotDuration: { days: 1 },
+          slotLabelInterval: { days: 1 },
+          slotLabelFormat: [
+            {
+              // 第一行：周范围
+              // formatter 只在 JS API 中起作用，React 里用 function
+              formatter: (info) => {
+                const start = new Date(info.start);
+                const end = new Date(info.start);
+                end.setDate(end.getDate() + 6); // 一周后
+
+                const pad = (n) => String(n).padStart(2, '0');
+                const startStr = `${pad(start.getMonth() + 1)}/${pad(start.getDate())}`;
+                const endStr = `${pad(end.getMonth() + 1)}/${pad(end.getDate())}`;
+
+                return `${startStr} - ${endStr}`;
+              }
+            },
+            {
+              // 第二行：日期（日）+ 日语星期
+              formatter: (info) => {
+                const date = new Date(info.date);
+                const daysJP = ['日', '月', '火', '水', '木', '金', '土'];
+                const pad = (n) => String(n).padStart(2, '0');
+                const day = pad(date.getDate());
+                const weekJP = daysJP[date.getDay()];
+                return `${day}（${weekJP}）`;
+              }
+            }
+          ]
+        }
+      }}
+      resources={[
+        { id: 'a', title: 'Resource A' },
+        { id: 'b', title: 'Resource B' }
+      ]}
+      events={[
+        {
+          id: '1',
+          resourceId: 'a',
+          start: '2025-05-19',
+          end: '2025-05-21',
+          title: 'Event 1'
+        }
+      ]}
+    />
+  );
+}
+
+
+
+/* 可放在对应组件的 CSS/SCSS 文件中 */
+.fc .fc-timeline-header .fc-cell-text {
+  white-space: pre-line; /* 允许换行 */
+}
+
+
+
+
+
+
 npm install
 npm add @fullcalendar/core @fullcalendar/react @fullcalendar/interaction @fullcalendar/resource @fullcalendar/resource-timeline
 npm install react-toastify
