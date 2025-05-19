@@ -1,3 +1,67 @@
+<FullCalendar
+  ...
+  initialView="resourceTimelineMonth"
+  firstDay={1}     // 让周一视为一周的开头 (可选)
+  views={{
+    resourceTimelineMonth: {
+      type: 'resourceTimeline', 
+      buttonText: 'Month',
+
+      // 1) 自定义显示的时间范围，从当月第一周一～最后周日
+      visibleRange: (currentDate) => {
+        // currentDate 一般是当月1号
+        let year = currentDate.getFullYear();
+        let month = currentDate.getMonth(); // 0基
+        // 找到当月1号
+        let start = new Date(year, month, 1);
+        // 向前回退直到「星期一」
+        while (start.getDay() !== 1) {
+          start.setDate(start.getDate() - 1);
+        }
+        // 找到当月最后一天
+        let end = new Date(year, month + 1, 0);
+        // 向后前进直到「星期日」（getDay()=0）
+        while (end.getDay() !== 0) {
+          end.setDate(end.getDate() + 1);
+        }
+        return { start, end };
+      },
+
+      // 2) 让最上层( level=0 )按周拆分，下一层( level=1 )按天
+      slotDuration: { days: 1 },
+      slotLabelInterval: [
+        { days: 7 },  // 顶层：每7天一个刻度（周）
+        { days: 1 }   // 底层：每天一个刻度
+      ],
+      slotLabelFormat: [
+        // 顶层先随便给一个日期格式；实际上会用 slotLabelContent 自定义
+        { month: 'numeric', day: 'numeric' },
+        // 底层显示“周几 + 日期”，例如 "Mon 5"
+        { weekday: 'short', day: 'numeric' }
+      ],
+      slotLabelContent: (arg) => {
+        if (arg.level === 0) {
+          // 这周的开始日期
+          const startDate = arg.date;
+          // 结束日期 = 开始+6天
+          const endDate = new Date(startDate);
+          endDate.setDate(endDate.getDate() + 6);
+
+          const startStr = `${startDate.getMonth() + 1}/${startDate.getDate()}`;
+          const endStr   = `${endDate.getMonth() + 1}/${endDate.getDate()}`;
+          // 让顶层文字看起来像 "5/5 - 5/11"
+          return { html: `<div>${startStr} - ${endStr}</div>` };
+        } else {
+          // 底层就用内置的格式(例如 "Mon 5")
+          return { html: `<div>${arg.text}</div>` };
+        }
+      }
+    }
+  }}
+/>
+
+
+
 文件结构:
 
 event_editor_extracted/
