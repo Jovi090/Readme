@@ -1,3 +1,72 @@
+FullCalendar React 弹窗自动滚动显示修改流程】
+
+目标：
+---------
+解决点击事件后弹出的 EventEdit 面板超出视口导致无法看到的问题。
+实现点击事件后，页面自动滚动，确保 popup 全部显示在屏幕中。
+
+步骤：
+---------
+
+1. ✅ 修改事件点击函数 handleEventClick
+---------------------------------------
+找到以下这段代码：
+    setShowEdit(true);
+
+替换为以下内容（加上自动滚动逻辑）：
+    setShowEdit(true);
+
+    // 弹出后自动滚动到视口中间
+    setTimeout(() => {
+      const popup = document.getElementById('event-edit-popup');
+      if (popup) {
+        const rect = popup.getBoundingClientRect();
+        if (rect.top < 0 || rect.bottom > window.innerHeight) {
+          window.scrollTo({
+            top: window.scrollY + rect.top - 100,
+            behavior: 'smooth'
+          });
+        }
+      }
+    }, 0);
+
+
+2. ✅ 给 <EventEdit /> 外层加容器并设置 ID
+-----------------------------------------
+找到原来的代码：
+
+    {showEdit && selectedEventInfo && (
+      <EventEdit
+        event={selectedEventInfo.plainObject}
+        onClose={() => setShowEdit(false)}
+        onSave={handleUpdateEvent}
+        resources={resources}
+      />
+    )}
+
+替换为带 ID 的容器：
+
+    {showEdit && selectedEventInfo && (
+      <div id="event-edit-popup">
+        <EventEdit
+          event={selectedEventInfo.plainObject}
+          onClose={() => setShowEdit(false)}
+          onSave={handleUpdateEvent}
+          resources={resources}
+        />
+      </div>
+    )}
+
+说明：
+---------
+- 该容器 ID 是我们在滚动逻辑中定位 popup 用的；
+- setTimeout 是为了等待 DOM 渲染完成后再执行滚动；
+- 你可以自由调整滚动偏移量（上面例子中是 100px）；
+
+
+
+
+
 <FullCalendar
   ...
   defaultTimedEventDuration="02:00:00"
