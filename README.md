@@ -1,5 +1,29 @@
 <FullCalendar
   ...
+  defaultTimedEventDuration="02:00:00"
+  eventReceive={(info) => {
+    // 若事件无结束时间，则手动设置为 2 小时后
+    if (!info.event.end) {
+      const start = info.event.start!;
+      const end = new Date(start.getTime() + 2 * 60 * 60 * 1000); // 加2小时
+      info.event.setEnd(end);
+    }
+  }}
+  eventDrop={(info) => {
+    // 拖动后也处理（特别是 timelineMonth 可能没有自动设置 end）
+    if (!info.event.end) {
+      const start = info.event.start!;
+      const end = new Date(start.getTime() + 2 * 60 * 60 * 1000);
+      info.event.setEnd(end);
+    }
+  }}
+/>
+
+
+
+
+<FullCalendar
+  ...
   initialView="resourceTimelineMonth"
   firstDay={1}     // 让周一视为一周的开头 (可选)
   views={{
