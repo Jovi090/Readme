@@ -1,3 +1,34 @@
+const getPopupStyle = () => {
+  const eventRect = event?.el?.getBoundingClientRect();
+  if (!eventRect) return {};
+  
+  const popupWidth = 300;
+  const windowWidth = window.innerWidth;
+  
+  let left = eventRect.left;
+  let top = eventRect.bottom;
+  
+  if (left + popupWidth > windowWidth) {
+    left = eventRect.right - popupWidth;
+    if (left < 0) {
+      left = windowWidth - popupWidth - 10;
+    }
+  }
+  
+  if (top + 300 > window.innerHeight) { 
+    top = eventRect.top - 300;
+    if (top < 0) top = 10;
+  }
+  
+  return {
+    position: 'fixed' as const,
+    left: left,
+    top: top,
+    zIndex: 1000
+  };
+};
+
+
 FullCalendar React 弹窗自动滚动显示修改流程】
 
 目标：
