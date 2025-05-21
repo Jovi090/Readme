@@ -1,3 +1,20 @@
+useEffect(() => {
+    const handleScroll = () => {
+      setPopupStyle(getPopupStyle());
+    };
+
+    window.addEventListener('scroll', handleScroll, true);
+    return () => {
+      window.removeEventListener('scroll', handleScroll, true);
+    };
+  }, [event]);
+
+  const [popupStyle, setPopupStyle] = useState<React.CSSProperties>({});
+
+
+
+qqqqqq
+
 const getPopupStyle = () => {
   const eventRect = event?.el?.getBoundingClientRect();
   if (!eventRect) return {};
