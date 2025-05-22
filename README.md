@@ -1,4 +1,177 @@
 
+======== 后端 – 原始课程 (Curriculum) ========
+
+1. Curriculum.java
+-------------------
+package com.yourapp.model;
+
+import javax.persistence.*;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+import lombok.AllArgsConstructor;
+import java.time.LocalDateTime;
+
+@Entity
+@Table(name = "curriculums")
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+public class Curriculum {
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    private String title;
+    private String description;
+
+    // 可按需扩展字段，如 duration, category 等
+}
+
+
+2. CurriculumRepository.java
+-------------------
+package com.yourapp.repository;
+
+import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.stereotype.Repository;
+import com.yourapp.model.Curriculum;
+
+@Repository
+public interface CurriculumRepository extends JpaRepository<Curriculum, Long> {
+    // 默认 CRUD 方法
+}
+
+
+3. CurriculumService.java
+-------------------
+package com.yourapp.service;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.stereotype.Service;
+import com.yourapp.model.Curriculum;
+import com.yourapp.repository.CurriculumRepository;
+import java.util.List;
+
+@Service
+public class CurriculumService {
+
+    @Autowired
+    private CurriculumRepository repo;
+
+    /** 获取所有课程模板 */
+    public List<Curriculum> getAllCurriculums() {
+        return repo.findAll();
+    }
+
+    /** 创建新课程模板 */
+    public Curriculum createCurriculum(Curriculum curriculum) {
+        return repo.save(curriculum);
+    }
+
+    /** 更新课程模板 */
+    public Curriculum updateCurriculum(Long id, Curriculum curriculum) {
+        curriculum.setId(id);
+        return repo.save(curriculum);
+    }
+
+    /** 删除课程模板 */
+    public void deleteCurriculum(Long id) {
+        repo.deleteById(id);
+    }
+}
+
+
+4. CurriculumController.java
+-------------------
+package com.yourapp.controller;
+
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.web.bind.annotation.*;
+import com.yourapp.model.Curriculum;
+import com.yourapp.service.CurriculumService;
+import java.util.List;
+
+@RestController
+@RequestMapping("/api/curriculums")
+@CrossOrigin(origins = "http://localhost:3030")
+public class CurriculumController {
+
+    @Autowired
+    private CurriculumService service;
+
+    /** 获取所有课程模板 */
+    @GetMapping
+    public List<Curriculum> getCurriculums() {
+        return service.getAllCurriculums();
+    }
+
+    /** 创建课程模板 */
+    @PostMapping
+    public Curriculum createCurriculum(@RequestBody Curriculum curriculum) {
+        return service.createCurriculum(curriculum);
+    }
+
+    /** 更新课程模板 */
+    @PutMapping("/{id}")
+    public Curriculum updateCurriculum(@PathVariable Long id, @RequestBody Curriculum curriculum) {
+        return service.updateCurriculum(id, curriculum);
+    }
+
+    /** 删除课程模板 */
+    @DeleteMapping("/{id}")
+    public void deleteCurriculum(@PathVariable Long id) {
+        service.deleteCurriculum(id);
+    }
+}
+
+
+======== 前端 – React + Axios (Curriculum API) ========
+
+1. api.ts
+-------------------
+import axios from 'axios';
+
+const API = axios.create({ baseURL: 'http://localhost:8080/api/curriculums' });
+
+// 原始课程 (Curriculum) 相关接口
+export const getCurriculums = () => API.get('/');
+export const createCurriculum = (curriculum) => API.post('/', curriculum);
+export const updateCurriculum = (id, curriculum) => API.put(`/${id}`, curriculum);
+export const deleteCurriculum = (id) => API.delete(`/${id}`);
+
+
+2. React 组件示例 (加载左侧课程栏)
+-------------------
+import React, { useEffect, useState } from 'react';
+import { getCurriculums } from './api';
+
+export default function CurriculumList() {
+  const [items, setItems] = useState([]);
+
+  useEffect(() => {
+    getCurriculums().then(res => {
+      setItems(res.data);
+    });
+  }, []);
+
+  return (
+    <div className="curriculum-list">
+      {items.map(cur => (
+        <div
+          key={cur.id}
+          className="fc-event"
+          data-curriculum={JSON.stringify(cur)}
+        >
+          {cur.title}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+
+
+
 ======== 后端（Spring Boot + JPA + PostgreSQL） ========
 
 1. application.yml
