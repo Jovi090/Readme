@@ -1,101 +1,77 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import resourceTimelinePlugin from '@fullcalendar/resource-timeline';
-
-const mockData = {
-  room: {
-    resources: [
-      { id: 'roomA', title: 'A 教室' },
-      { id: 'roomB', title: 'B 教室' },
-    ],
-    events: [
-      {
-        id: '1',
-        title: '数学课',
-        start: '2024-06-01T10:00:00',
-        end: '2024-06-01T12:00:00',
-        resourceId: 'roomA',
-      },
-      {
-        id: '2',
-        title: '英语课',
-        start: '2024-06-01T13:00:00',
-        end: '2024-06-01T15:00:00',
-        resourceId: 'roomB',
-      },
-    ],
-  },
-  group: {
-    resources: [
-      { id: 'group1', title: '一年级一班' },
-      { id: 'group2', title: '一年级二班' },
-    ],
-    events: [
-      {
-        id: '1',
-        title: '数学课',
-        start: '2024-06-01T10:00:00',
-        end: '2024-06-01T12:00:00',
-        resourceId: 'group1',
-      },
-      {
-        id: '2',
-        title: '英语课',
-        start: '2024-06-01T13:00:00',
-        end: '2024-06-01T15:00:00',
-        resourceId: 'group2',
-      },
-    ],
-  },
-};
+import interactionPlugin from '@fullcalendar/interaction';
 
 const MyCalendar = () => {
-  const [resourceType, setResourceType] = useState('room');
-  const [resources, setResources] = useState([]);
-  const [events, setEvents] = useState([]);
+  const [events, setEvents] = useState([
+    {
+      id: '1',
+      title: '数学课',
+      start: '2024-06-01T10:00:00',
+      end: '2024-06-01T12:00:00',
+      resourceId: 'roomA',
+    },
+  ]);
+  const [copyKey, setCopyKey] = useState(false);
+  const calendarRef = useRef(null);
 
-  const fetchData = async (type) => {
-    // 模拟后端数据
-    const data = mockData[type];
-    setResources(data.resources);
-    setEvents(data.events);
-
-    // ✅ 若接入后端，替换为以下代码即可：
-    /*
-    const res = await fetch(`/calendar-data?type=${type}`);
-    const data = await res.json();
-    setResources(data.resources);
-    setEvents(data.events);
-    */
-  };
-
+  // 监听 shift 键
   useEffect(() => {
-    fetchData(resourceType);
-  }, [resourceType]);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.shiftKey) setCopyKey(true);
+    };
+    const handleKeyUp = () => {
+      setCopyKey(false);
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    window.addEventListener('keyup', handleKeyUp);
+    return () => {
+      window.removeEventListener('keydown', handleKeyDown);
+      window.removeEventListener('keyup', handleKeyUp);
+    };
+  }, []);
 
-  const toggleResourceType = () => {
-    setResourceType(prev => (prev === 'room' ? 'group' : 'room'));
+  const handleEventDrop = (info: any) => {
+    const { event } = info;
+
+    if (copyKey) {
+      // 复制一个新事件
+      const newEvent = {
+        id: String(Date.now()), // 简单生成唯一 id
+        title: event.title,
+        start: event.startStr,
+        end: event.endStr,
+        resourceId: event.getResources()[0]?.id,
+      };
+
+      setEvents(prev => [...prev, newEvent]);
+
+      // 还原原事件的位置
+      info.revert();
+    } else {
+      // 正常拖动修改事件时间
+      const updated = events.map(e =>
+        e.id === event.id
+          ? { ...e, start: event.startStr, end: event.endStr }
+          : e
+      );
+      setEvents(updated);
+    }
   };
 
   return (
     <FullCalendar
-      plugins={[resourceTimelinePlugin]}
+      ref={calendarRef}
+      plugins={[resourceTimelinePlugin, interactionPlugin]}
       initialView="resourceTimelineDay"
-      headerToolbar={{
-        left: 'prev,next today toggleResource',
-        center: 'title',
-        right: 'resourceTimelineDay,resourceTimelineWeek',
-      }}
-      customButtons={{
-        toggleResource: {
-          text: '切换资源类型',
-          click: toggleResourceType,
-        },
-      }}
-      resources={resources}
+      editable={true}
       events={events}
-      resourceAreaHeaderContent={resourceType === 'room' ? '教室' : '班级'}
-      height="auto"
+      resources={[
+        { id: 'roomA', title: 'A 教室' },
+        { id: 'roomB', title: 'B 教室' },
+      ]}
+      eventDrop={handleEventDrop}
     />
   );
 };
