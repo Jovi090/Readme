@@ -28,18 +28,17 @@ const EventDetailModal: React.FC<{ event: any; onClose: () => void }> = ({ event
 
 const ViewPage: React.FC = () => {
     const [events, setEvents] = useState<any[]>([]);
-    const [classes, setClasses] = useState<any[]>([]);
+    const [resources, setResources] = useState<any[]>([]);
     const [detailEvent, setDetailEvent] = useState<any | null>(null);
-    const [isPublished, setIsPublished] = useState<boolean>(true); // 可按需要动态控制
+    // const [isPublished, setIsPublished] = useState<boolean>(true); // 公開判定は現在無効化
 
     useEffect(() => {
         const fetchData = async () => {
             try {
-                const [eventRes, classRes] = await Promise.all([
-                    axios.get('http://localhost:8080/api/schedules/published'),
-                    axios.get('http://localhost:8080/api/classes') // 假设你有这个接口
-                ]);
-                const eventsData = eventRes.data.map((item: any) => ({
+                const res = await axios.get('http://localhost:8080/api/schedules/published');
+                const raw = res.data;
+
+                const eventsData = raw.map((item: any) => ({
                     id: item.id,
                     title: item.curriculumsName,
                     start: item.startDateTime,
@@ -52,41 +51,22 @@ const ViewPage: React.FC = () => {
                         duration: "N/A"
                     }
                 }));
+
+                const uniqueGroups = Array.from(new Set(raw.map((item: any) => item.groupsName)));
+                const resourceData = uniqueGroups.map((name: string) => ({
+                    id: name,
+                    title: name
+                }));
+
                 setEvents(eventsData);
-                setClasses(classRes.data);
+                setResources(resourceData);
             } catch (err) {
                 console.error("データ取得に失敗しました", err);
-                setIsPublished(false);
+                // setIsPublished(false); // 公開判定無効化
             }
         };
         fetchData();
     }, []);
-
-    const resources = classes.map(cls => ({
-        id: String(cls.id),
-        title: cls.name,
-    }));
-
-    if (!isPublished) {
-        return (
-            <div className="view-page-calendar-container">
-                <div className="view-page-calendar-wrapper unpublished-center">
-                    <div className="not-published-card">
-                        <div className="not-published-icon">
-                            <svg width="40" height="40" fill="none" viewBox="0 0 24 24">
-                                <path fill="#6366F1" d="M12 2a10 10 0 1 0 10 10A10.011 10.011 0 0 0 12 22m0 17a1.5 1.5 0 1 1" />
-                            </svg>
-                        </div>
-                        <div className="not-published-title">まだ公開されていません</div>
-                        <div className="not-published-message">
-                            編集画面で「公開」ボタンを押すと、<br />
-                            ここにカリキュラムが表示されます。
-                        </div>
-                    </div>
-                </div>
-            </div>
-        );
-    }
 
     return (
         <div className="view-page-calendar-container">
