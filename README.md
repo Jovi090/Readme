@@ -1,74 +1,81 @@
-✅ 目标：在 FullCalendar 中将日本の祝日显示为淡红色背景块（自动获取）
+目标：使用日本の祝日 API（无认证）将祝日显示为 FullCalendar 中的淡红色背景块
 
 =========================
-【步骤 1】获取 Google API Key
+【使用的 API 来源】
 =========================
-1. 打开 https://console.cloud.google.com/
-2. 创建一个项目（如未创建）
-3. 启用「Google Calendar API」
-4. 前往“API 和服务” > “凭据”，创建 API Key
-5. 获取到 API Key，例如：AIzaSyXXXX...
+提供者：https://holidays-jp.github.io/
+API 地址：https://holidays-jp.github.io/api/v1/date.json
+
+特点：
+- 无需 API Key
+- 免费公开
+- 返回格式简单（JSON）
+- 数据包含祝日名称和日期
 
 =========================
-【步骤 2】准备祝日数据请求函数
+【步骤 1】在组件中定义请求函数
 =========================
-在你的 React 组件文件顶部添加：
+const fetchJapaneseHolidays = async (): Promise<{ [date: string]: string }> => {
+  const res = await fetch('https://holidays-jp.github.io/api/v1/date.json');
+  return await res.json();
+};
 
-const JAPANESE_HOLIDAY_CALENDAR_ID = 'ja.japanese#holiday@group.v.calendar.google.com';
-const API_KEY = 'YOUR_GOOGLE_API_KEY'; // ⛳️ 替换成你自己的 API Key
-
-const fetchJapaneseHolidays = async (timeMin: string, timeMax: string) => {
-  const url = `https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(
-    JAPANESE_HOLIDAY_CALENDAR_ID
-  )}/events?key=${API_KEY}&timeMin=${timeMin}&timeMax=${timeMax}&singleEvents=true&orderBy=startTime`;
-
-  const res = await fetch(url);
-  const data = await res.json();
-
-  return (data.items || []).map((item: any) => ({
-    start: item.start.date,
-    end: item.end.date,
-    title: item.summary,
+=========================
+【步骤 2】转换为背景事件（FullCalendar 用）
+=========================
+const convertToBackgroundEvents = (holidays: { [date: string]: string }) => {
+  return Object.entries(holidays).map(([date, name]) => ({
+    start: date,
+    end: date,
+    title: name,
     display: 'background',
-    classNames: ['fc-holiday-bg'],
+    classNames: ['fc-holiday-bg']
   }));
 };
 
 =========================
-【步骤 3】在组件中加载祝日事件
+【步骤 3】加载祝日事件（useEffect 中）
 =========================
-import { useEffect, useState } from 'react';
-
 const [holidayEvents, setHolidayEvents] = useState([]);
 
 useEffect(() => {
-  const timeMin = '2025-01-01T00:00:00Z';
-  const timeMax = '2027-01-01T00:00:00Z';
-
-  fetchJapaneseHolidays(timeMin, timeMax).then(setHolidayEvents);
+  fetchJapaneseHolidays()
+    .then(convertToBackgroundEvents)
+    .then(setHolidayEvents);
 }, []);
 
 =========================
-【步骤 4】在 FullCalendar 中传入祝日事件
+【步骤 4】在 <FullCalendar /> 中使用
 =========================
 <FullCalendar
   ...
   events={[...yourOtherEvents, ...holidayEvents]}
 />
 
-如无其他事件，可直接：
+如无其他事件：
 events={holidayEvents}
 
 =========================
-【步骤 5】添加淡红色背景样式
+【步骤 5】添加祝日背景样式
 =========================
 .fc-holiday-bg {
   background-color: rgba(255, 150, 150, 0.2);
 }
 
 =========================
-✅ 可选扩展：
+✅ 示例返回数据
 =========================
-- 加载 weekend 背景颜色（如需我也可以提供）
-- 祝日 tooltip 提示：title 字段已包含祝日名称
-- 多语言支持或祝日图标扩展等
+{
+  "2025-01-01": "元日",
+  "2025-01-13": "成人の日",
+  "2025-02-11": "建国記念の日",
+  ...
+}
+
+=========================
+【总结】
+=========================
+- ✅ 无需申请 API Key
+- ✅ 即调即用，适合浏览器前端直接请求
+- ✅ 稳定可靠，适合生产项目使用
+- ✅ 可轻松扩展为 Tooltip、节假日标记等功能
