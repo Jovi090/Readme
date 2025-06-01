@@ -1,151 +1,173 @@
-===== frontend/Calendar.tsx =====
+// ✅ React Frontend: Calendar.tsx
 import React, { useState, useRef, useEffect } from 'react';
 import FullCalendar from '@fullcalendar/react';
 import resourceTimelinePlugin from '@fullcalendar/resource-timeline';
 import interactionPlugin from '@fullcalendar/interaction';
 import EventEdit from './EventEditor';
 import '../styles/calendar.css';
-import { FaTrashAlt } from 'react-icons/fa';
-import { ToastContainer, toast } from 'react-toastify';
-import 'react-toastify/dist/ReactToastify.css';
-import jaLocale from '@fullcalendar/core/locales/ja';
+ // ゴミ箱アイコンを読み込む
 import { useEvents } from '../contexts/EventContext';
-import { fetchDrafts, saveDraft, deleteDraft, publishDrafts } from '../api/draftApi';
-
+// import { useSettings } from '../contexts/SettingsContext';
 type ResourceType = 'room' | 'group';
-
 const Calendar: React.FC = () => {
-    const [resourceType, setResourceType] = useState<ResourceType>('group');
+    const [resourceType, setResourceType] = useState<ResourceType>('room');
     const [resources, setResources] = useState<{ id: string; title: string }[]>([]);
-    const { events, setEvents } = useEvents(); // 状態管理フック
+    const fetchData = async (type: ResourceType) => {
+        const data = mockData[type];
+        setResources(data.resources);
+        // バックエンドと繋ぐ場合
+        /*
+        const res = await fetch(`/calendar-data?type=${type}`);
+        const data = await res.json();
+        setResources(data.resources);
+        setEvents(data.events);
+        */
+    };
+// 状態管理：すべてのイベント、選択されたイベント、編集パネルの表示状態を制御
+    const { events, setEvents, publish } = useEvents();
+// 現在選択されているイベントの情報
     const [selectedEventInfo, setSelectedEventInfo] = useState<{
-        eventObj: any;
-        plainObject: any;
+        eventObj: any; // FullCalendar のネイティブイベントオブジェクト
+        plainObject: any; // 通常のオブジェクト形式
     } | null>(null);
+    // 編集パネルの表示・非表示を制御
     const [showEdit, setShowEdit] = useState(false);
-    const trashBinRef = useRef<HTMLDivElement>(null);
-    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-    const [eventToDelete, setEventToDelete] = useState<any>(null);
-    const [isDraggingOver, setIsDraggingOver] = useState(false);
-
-    // 初期データ読み込み（DBから草稿データを取得）
-    useEffect(() => {
-        const fetchData = async () => {
-            try {
-                const draftData = await fetchDrafts();
-                const convertedEvents = draftData.map((item: any) => ({
-                    id: item.id,
-                    title: item.curriculumsName,
-                    start: item.startDateTime,
-                    end: item.endDateTime,
-                    resourceId: item.groupsName,
-                    backgroundColor: item.backgroundColor,
-                    borderColor: item.backgroundColor,
+    // ゴミ箱DOM要素の参照を取得
+    // ゴミ箱にドラッグされたときのホバー状態を制御
+    // const { classes } = useSettings();
+    // FullCalendar の resource 形式に変換
+    // const resources = classes.map(cls => ({
+    //     id: String(cls.id),
+    //     title: `Group ${cls.name}`, // "Group X"
+    // }));
+    // イベントクリック時
+ const handleEventClick = (clickInfo: any) => {
+    console.log("クリックされたイベントのデータを確認する:", clickInfo.event);
+    // 取得したデータを状態にセットする
+    setSelectedEventInfo({
+        eventObj: clickInfo.event,
+        plainObject: {
+            id: clickInfo.event.id,
+            title: clickInfo.event.title,
+            start: clickInfo.event.start,
+            end: clickInfo.event.end,
+            // resourceId: clickInfo.event.getResources()[0]?.id,
+            backgroundColor: clickInfo.event.backgroundColor,
+            borderColor: clickInfo.event.borderColor || clickInfo.event.backgroundColor,
+            // カスタム属性（FullCalendar標準でないもの）。上記は標準プロパティ
+            extendedProps: {
+                department: clickInfo.event.extendedProps?.department,
+                // 初期値は空。設定データを取得してからここを更新する必要がある
+                instructor: clickInfo.event.extendedProps?.instructor || '',
+                duration: clickInfo.event.extendedProps?.duration || '',
+                location: clickInfo.event.extendedProps?.location || ''
+            },
+            el: clickInfo.el
+        }
+    });
+    // クリックでポップアップを表示
+    setShowEdit(true);
+};
+// ドロップで新しいイベントを作成する関数
+const handleEventReceive = (info: any) => {
+    console.log("ドロップ後のイベントデータを確認する:", info);
+    const droppedResId = info.event.getResources()[0]?.id;
+    let start = info.event.start;
+    let end = info.event.end;
+    // --- 時刻処理ロジック ---
+    // start/endが「時刻なし」（日付のみ）の場合、デフォルトで09:00～18:00に設定
+    if (start && 
+        start.getHours() === 0 && 
+        start.getMinutes() === 0 && 
+        start.getSeconds() === 0) {
+        // 日付のみ（時刻が00:00:00）の場合、09:00に設定
+        start = new Date(start);
+        start.setHours(9, 0, 0, 0); // 09:00
+        end = new Date(start);
+        end.setHours(18, 0, 0, 0); // 18:00
+    } 
+    else if (!start) {
+        // start自体がない場合、現在の日付09:00～18:00を設定
+        start = new Date();
+        start.setHours(9, 0, 0, 0);
+        end = new Date(start);
+        end.setHours(18, 0, 0, 0);
+    } 
+    else if (!end) {
+        // startのみ、endがない場合、startから9時間後をendに設定
+        end = new Date(start);
+        end.setHours(start.getHours() + 9);
+    }
+// 新しいイベントオブジェクトを作成
+    const newEvent = {
+        id: String(Date.now()), // 一意なIDを生成
+        title: info.event.title,
+        start: start,    // 開始日時（必ず時刻を含む）
+        end: end,        // 終了日時（必ず時刻を含む）
+        resourceId: droppedResId, // リソース（クラス）ID,
+        backgroundColor: info.event.backgroundColor,
+        borderColor: info.event.backgroundColor,
+        extendedProps: {
+            department: info.event.extendedProps?.department || '',
+            instructor: info.event.extendedProps?.instructor || '',
+            duration: info.event.extendedProps?.duration || '',
+            location: info.event.extendedProps?.location || ''
+        }
+    };
+    // イベントリストに追加
+    setEvents(prev => [...prev, newEvent]);
+};
+// イベントのプロパティを更新。フォームが変更されたらここも更新する必要がある
+const handleUpdateEvent = (updatedEvent: any) => {
+    if (!selectedEventInfo) return;
+    const { eventObj } = selectedEventInfo;
+    eventObj.setProp('title', updatedEvent.title);
+    eventObj.setExtendedProp('department', updatedEvent.extendedProps?.department);
+    eventObj.setExtendedProp('instructor', updatedEvent.extendedProps?.instructor);
+    eventObj.setExtendedProp('duration', updatedEvent.extendedProps?.duration);
+    eventObj.setExtendedProp('location', updatedEvent.extendedProps?.location);
+ // ローカルの events ステートを更新する
+    setEvents(prevEvents =>
+        prevEvents.map(event =>
+            event.id === updatedEvent.id
+                ? {
+                    ...event,
+                    title: updatedEvent.title,
                     extendedProps: {
-                        department: item.departmentsName,
-                        instructor: item.lecturersName,
-                        duration: '',
-                        location: item.roomsName
+                        ...event.extendedProps,
+                        ...updatedEvent.extendedProps
                     }
-                }));
-                setEvents(convertedEvents);
-
-                const uniqueGroups = Array.from(new Set(draftData.map((e: any) => e.groupsName)));
-                setResources(uniqueGroups.map(name => ({ id: name, title: name })));
-            } catch (err) {
-                toast.error("データ取得に失敗しました");
-            }
-        };
-        fetchData();
-    }, []);
-
-    const handleEventClick = (clickInfo: any) => {
-        setSelectedEventInfo({
-            eventObj: clickInfo.event,
-            plainObject: {
-                id: clickInfo.event.id,
-                title: clickInfo.event.title,
-                start: clickInfo.event.start,
-                end: clickInfo.event.end,
-                backgroundColor: clickInfo.event.backgroundColor,
-                borderColor: clickInfo.event.borderColor || clickInfo.event.backgroundColor,
-                extendedProps: {
-                    department: clickInfo.event.extendedProps?.department,
-                    instructor: clickInfo.event.extendedProps?.instructor || '',
-                    duration: clickInfo.event.extendedProps?.duration || '',
-                    location: clickInfo.event.extendedProps?.location || ''
-                },
-                el: clickInfo.el
-            }
-        });
-        setShowEdit(true);
-    };
-
-    const handleUpdateEvent = async (updatedEvent: any) => {
-        if (!selectedEventInfo) return;
-        const { eventObj } = selectedEventInfo;
-
-        eventObj.setProp('title', updatedEvent.title);
-        eventObj.setExtendedProp('department', updatedEvent.extendedProps?.department);
-        eventObj.setExtendedProp('instructor', updatedEvent.extendedProps?.instructor);
-        eventObj.setExtendedProp('duration', updatedEvent.extendedProps?.duration);
-        eventObj.setExtendedProp('location', updatedEvent.extendedProps?.location);
-
-        setEvents(prev =>
-            prev.map(e => e.id === updatedEvent.id ? {
-                ...e,
-                title: updatedEvent.title,
-                extendedProps: {
-                    ...e.extendedProps,
-                    ...updatedEvent.extendedProps
                 }
-            } : e)
-        );
-
-        await saveDraft({
-            id: updatedEvent.id,
-            curriculumsName: updatedEvent.title,
-            startDateTime: updatedEvent.start,
-            endDateTime: updatedEvent.end,
-            groupsName: updatedEvent.resourceId,
-            backgroundColor: updatedEvent.backgroundColor,
-            departmentsName: updatedEvent.extendedProps?.department,
-            lecturersName: updatedEvent.extendedProps?.instructor,
-            roomsName: updatedEvent.extendedProps?.location,
-            categoriesName: '一時カテゴリ'
-        });
-
-        setShowEdit(false);
-        toast.success("保存しました");
-    };
-
-    const handleEventDragStop = (info: any) => {
-        const target = info.jsEvent.target;
-        if (trashBinRef.current?.contains(target)) {
-            setEventToDelete(info.event);
-            setShowDeleteConfirm(true);
-        }
-        setIsDraggingOver(false);
-    };
-
-    const confirmDelete = async () => {
-        if (eventToDelete) {
-            eventToDelete.remove();
-            setEvents(prev => prev.filter(e => e.id !== eventToDelete.id));
-            await deleteDraft(Number(eventToDelete.id));
-        }
-        setShowDeleteConfirm(false);
-        setEventToDelete(null);
-        setIsDraggingOver(false);
-    };
-
-    const cancelDelete = () => {
-        setShowDeleteConfirm(false);
-        setEventToDelete(null);
-        setIsDraggingOver(false);
-    };
-
-    const checkFormComplete = (eventData: any) => {
+                : event
+        )
+    );
+    // ポップアップを閉じる
+    setShowEdit(false);
+};
+    setIsDraggingOver(true);
+};
+// イベントのドラッグが終了したときの処理関数
+// setIsDraggingOver(true);
+const target= info.jsEvent.target;
+if(trashBinRef.current?.contains(target)){
+setEventToDelete(info.event);
+setShowDeleteConfirm(true);
+}
+setIsDraggingOver(false)
+};
+// イベントの削除を確認する
+const confirmDelete=()=>{
+  if(eventToDelete){
+    eventToDelete.remove();
+    setEvents(prev =>prev.filter(e =>e.id !== eventToDelete.id));
+  }
+  setShowDeleteConfirm(false);
+  setEventToDelete(null);
+  setIsDraggingOver(false);
+};
+// 削除をキャンセルする
+// フオ-ムがすべて入カされているか確認する
+const checkFormComplete = (eventData: any) => {
         const props = eventData.extendedProps || {};
         return (
             (eventData.instructor || props.instructor) &&
@@ -153,339 +175,202 @@ const Calendar: React.FC = () => {
             (eventData.location || props.location)
         );
     };
-
-    const handleSaveClick = () => {
+const handleSaveClick = () => {
         if (!selectedEventInfo) return;
         const isComplete = checkFormComplete(selectedEventInfo.plainObject.extendedProps);
+        console.log(selectedEventInfo.plainObject.extendedProps);
         if (!isComplete) {
-            toast.warning('未入力項目があります');
+            toast.warning('未入力項目があります', {
+                position: "top-center",
+                autoClose: 3000,
+            });
         } else {
-            handleUpdateEvent(selectedEventInfo.plainObject);
+            handleUpdateEvent(selectedEventInfo.plainObject); // 调用更新函数
+            toast.success('更新が完了しました', {
+                position: "top-center",
+                autoClose: 2000,
+            });
         }
     };
-
+ const handleEventResize = (info: any) => {
+//Handle event resize logic here if needed
+    };
+    useEffect(() => {
+        fetchData(resourceType);
+    }, [resourceType]);
     const handleGroupSwitch = () => {
         setResourceType(prev => prev === 'room' ? 'group' : 'room');
     };
-
-    const handlePublish = async () => {
-        try {
-            await publishDrafts();
-            toast.success("公開しました");
-        } catch {
-            toast.error("公開に失敗しました");
-        }
-    };
-
-    return (
-        <div className="calendar-container">
-            <div ref={trashBinRef} className={`trash-bin ${isDraggingOver ? 'drag-over' : ''}`}>
-                <FaTrashAlt className="trash-icon" />
-                <span>削除するにはここにドラッグ</span>
-            </div>
-
-            <ToastContainer position="top-center" autoClose={3000} hideProgressBar />
-
-            <div className="calendar-wrapper">
-                <FullCalendar
-                    locale="ja"
-                    locales={[jaLocale]}
-                    schedulerLicenseKey="CC-Attribution-NonCommercial-NoDerivatives"
-                    plugins={[resourceTimelinePlugin, interactionPlugin]}
-                    initialView="resourceTimelineDay"
-                    editable={true}
-                    droppable={true}
-                    eventDragStop={handleEventDragStop}
-                    firstDay={1}
-                    events={events}
-                    resources={resources}
-                    resourceAreaWidth="20%"
-                    resourceAreaHeaderContent={resourceType === 'room' ? '会場' : 'クラス'}
-                    slotMinTime="09:00:00"
-                    slotMaxTime="18:00:00"
-                    eventClick={handleEventClick}
-                    height="100%"
-                    headerToolbar={{
-                        left: 'updateBtn uploadBtn prev,next validationBtn viewBtn',
-                        center: 'title',
-                        right: 'resourceTimelineDay,resourceTimelineWeek,resourceTimelineMonth'
-                    }}
-                    customButtons={{
-                        viewBtn: {
-                            text: '切替',
-                            click: handleGroupSwitch
-                        },
-                        updateBtn: {
-                            text: '保存',
-                            click: handleSaveClick
-                        },
-                        validationBtn: {
-                            text: '▲',
-                            click: handleSaveClick
-                        },
-                        uploadBtn: {
-                            text: '公開',
-                            click: handlePublish
-                        }
-                    }}
-                    views={{
-                        resourceTimelineDay: { buttonText: '日' },
-                        resourceTimelineMonth: { buttonText: '月' },
-                        resourceTimelineWeek: {
-                            buttonText: '週',
-                            dayHeaderFormat: { weekday: 'short', day: 'numeric' },
-                            dayHeaders: true,
-                            type: 'resourceTimeline',
-                            duration: { weeks: 1 },
-                            slotDuration: { days: 1 },
-                            slotLabelFormat: [{ weekday: 'short', day: 'numeric' }]
-                        }
-                    }}
-                    eventContent={(arg) => ({
-                        html: `<div class="fc-event-container"><div class="fc-event-main">${arg.event.title}</div></div>`
-                    })}
-                />
-                {showDeleteConfirm && (
-                    <div className="custom-confirm-modal">
-                        <div className="confirm-modal-content">
-                            <h3>イベントの削除</h3>
-                            <p>このイベントを削除してもよろしいですか？</p>
-                            <div className="confirm-buttons">
-                                <button onClick={confirmDelete}>はい</button>
-                                <button onClick={cancelDelete}>いいえ</button>
-                            </div>
-                        </div>
-                    </div>
-                )}
-                {showEdit && selectedEventInfo && (
-                    <EventEdit
-                        event={selectedEventInfo.plainObject}
-                        onclose={() => setShowEdit(false)}
-                        onSave={handleUpdateEvent}
-                        resources={resources}
-                    />
-                )}
-            </div>
-        </div>
-    );
+ return (
+    <div className="calendar-container">
+      {/* ゴミ箱エリア */}
+      <ToastContainer
+      position="top-center"
+      autoClose={3000}
+      hideProgressBar
+      newestOnTop
+      closeOnClick
+      pauseOnFocusLoss
+      draggable
+      pauseOnHover
+    />
+      <div className="calendar-wrapper">
+        <FullCalendar
+          locale="ja"
+          locales={[jaLocale]}
+          schedulerLicenseKey="CC-Attribution-NonCommercial-NoDerivatives"
+          plugins={[resourceTimelinePlugin, interactionPlugin]}
+          initialView="resourceTimelineDay"
+           eventResize={handleEventResize}
+          editable={true}
+          droppable={true}
+          firstDay={1}
+          events={events}
+          resourceAreaWidth="20%"
+          resources={resources}
+          eventMaxStack={2}
+          resourceAreaHeaderContent={resourceType === 'room' ? '会場' : 'クラス'}
+          slotMinTime="09:00:00"
+          slotMaxTime="18:00:00"
+          eventReceive={handleEventReceive}
+          eventClick={handleEventClick}
+          height="100%"
+          headerToolbar={{
+              left: 'updateBtn uploadBtn prev,next validationBtn viewBtn',  
+              center: 'title',
+              right: 'resourceTimelineDay,resourceTimelineWeek,resourceTimelineMonth'
+            }}
+            customButtons={{
+              viewBtn: {  
+                text: 'Change',
+                click: handleGroupSwitch,
+              },
+              updateBtn: {
+                text: '更新',
+                click: handleSaveClick,
+              },
+              validationBtn: {
+                text: '▲',
+                click: handleSaveClick,
+              },
+              uploadBtn: {  // 补充缺失的配置
+                text: '公開',
+                click: () => {
+                publish();
+                toast.success('公開されました', {
+                  position: "top-center",
+                  autoClose: 2000,  
+                  hideProgressBar: true,
+                  closeOnClick: true,
+                  pauseOnHover: true,
+                  draggable: true,
+                  progress: undefined
+                });
+              }
+            }
+          }}
+        views={{
+          resourceTimelineDay: {  
+            buttonText: '日'
+          },
+          resourceTimelineMonth: {
+            buttonText: '月'
+          },
+          resourceTimelineWeek: {
+            buttonText: '週',
+            dayHeaderFormat: {
+              weekday: 'short',
+              day: 'numeric'
+            },
+            dayHeaders: true,
+            type: 'resourceTimeline',  
+            duration: { weeks: 1 },
+            slotDuration: { days: 1 },
+            slotLabelFormat: [{
+              weekday: 'short',
+              day: 'numeric'
+            }
+          ]
+          }
+          }}
+eventContent={(arg) => ({
+  html: `
+    <div class="fc-event-container">
+      <div class="fc-event-main">${arg.event.title}</div>  
+    </div>
+  `
+})}
+/>
+      {/*イベント編集パネル */}
+      {showEdit && selectedEventInfo &&(
+      <EventEdit
+      event={selectedEventInfo.plainObject}
+      onclose={()=>setShowEdit(false)}
+      onSave={handleUpdateEvent}
+      resources={resources}
+        />
+      )}
+      </div>
+    </div>
+  );
 };
-
 export default Calendar;
 
-===== frontend/api/draftApi.ts =====
-import axios from 'axios';
 
-// 草稿一覧を取得
-export const fetchDrafts = async () => {
-    const res = await axios.get('/api/schedules/draft');
-    return res.data;
-};
 
-// 草稿を保存
-export const saveDraft = async (draft: any) => {
-    const res = await axios.post('/api/schedules/draft', draft);
-    return res.data;
-};
+// ✅ Java Backend Code (Spring Boot)
 
-// 草稿を削除
-export const deleteDraft = async (id: number) => {
-    await axios.delete(`/api/schedules/draft/${id}`);
-};
-
-// 草稿を公開
-export const publishDrafts = async () => {
-    await axios.post('/api/schedules/draft/publish');
-};
-
-===== frontend/contexts/EventContext.tsx =====
-import React, { createContext, useContext, useState } from 'react';
-
-// イベント状態用の型定義
-interface EventContextType {
-    events: any[];
-    setEvents: React.Dispatch<React.SetStateAction<any[]>>;
-}
-
-const EventContext = createContext<EventContextType | undefined>(undefined);
-
-// Provider
-export const EventProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
-    const [events, setEvents] = useState<any[]>([]);
-    return (
-        <EventContext.Provider value={{ events, setEvents }}>
-            {children}
-        </EventContext.Provider>
-    );
-};
-
-// フックとして使用
-export const useEvents = () => {
-    const context = useContext(EventContext);
-    if (!context) {
-        throw new Error('useEvents must be used within an EventProvider');
-    }
-    return context;
-};
-
-===== backend/controller/ScheduleDraftController.java =====
-package simplex.bn25.centmerci.server.controller;
-
-import lombok.RequiredArgsConstructor;
-import org.springframework.web.bind.annotation.*;
-import simplex.bn25.centmerci.server.entity.ScheduleDraft;
-import simplex.bn25.centmerci.server.service.ScheduleDraftService;
-
-import java.util.List;
-
-@RestController
-@RequestMapping("/api/schedules/draft")
-@RequiredArgsConstructor
-@CrossOrigin(origins = "*")
-public class ScheduleDraftController {
-
-    private final ScheduleDraftService draftService;
-
-    @GetMapping
-    public List<ScheduleDraft> getAllDrafts() {
-        return draftService.getDrafts();
-    }
-
-    @PostMapping
-    public ScheduleDraft saveDraft(@RequestBody ScheduleDraft draft) {
-        return draftService.saveDraft(draft);
-    }
-
-    @DeleteMapping("/{id}")
-    public void deleteDraft(@PathVariable Long id) {
-        draftService.deleteDraft(id);
-    }
-
-    @PostMapping("/publish")
-    public void publish() {
-        draftService.publishDrafts();
-    }
-}
-
-===== backend/service/ScheduleDraftService.java =====
-package simplex.bn25.centmerci.server.service;
-
-import lombok.RequiredArgsConstructor;
-import org.springframework.stereotype.Service;
-import simplex.bn25.centmerci.server.entity.ScheduleDraft;
-import simplex.bn25.centmerci.server.entity.SchedulePublished;
-import simplex.bn25.centmerci.server.repository.ScheduleDraftRepository;
-import simplex.bn25.centmerci.server.repository.SchedulePublishedRepository;
-
-import java.time.LocalDateTime;
-import java.util.List;
-import java.util.stream.Collectors;
-
-@Service
-@RequiredArgsConstructor
-public class ScheduleDraftService {
-
-    private final ScheduleDraftRepository draftRepo;
-    private final SchedulePublishedRepository publishedRepo;
-
-    public List<ScheduleDraft> getDrafts() {
-        return draftRepo.findAll();
-    }
-
-    public ScheduleDraft saveDraft(ScheduleDraft draft) {
-        return draftRepo.save(draft);
-    }
-
-    public void deleteDraft(Long id) {
-        draftRepo.deleteById(id);
-    }
-
-    public void publishDrafts() {
-        List<ScheduleDraft> drafts = draftRepo.findAll();
-
-        for (ScheduleDraft draft : drafts) {
-            if (draft.getCurriculumsName() == null || draft.getStartDateTime() == null || draft.getEndDateTime() == null) {
-                throw new IllegalStateException("未入力の項目があります。公開できません。");
-            }
-        }
-
-        publishedRepo.deleteAll();
-
-        List<SchedulePublished> published = drafts.stream().map(d -> {
-            SchedulePublished p = new SchedulePublished();
-            p.setGroupsName(d.getGroupsName());
-            p.setDepartmentsName(d.getDepartmentsName());
-            p.setLecturersName(d.getLecturersName());
-            p.setCurriculumsName(d.getCurriculumsName());
-            p.setRoomsName(d.getRoomsName());
-            p.setCategoriesName(d.getCategoriesName());
-            p.setBackgroundColor(d.getBackgroundColor());
-            p.setStartDateTime(d.getStartDateTime());
-            p.setEndDateTime(d.getEndDateTime());
-            p.setCreatedDateTime(LocalDateTime.now());
-            return p;
-        }).collect(Collectors.toList());
-
-        publishedRepo.saveAll(published);
-    }
-}
-
-===== backend/repository/ScheduleDraftRepository.java =====
-package simplex.bn25.centmerci.server.repository;
-
-import org.springframework.data.jpa.repository.JpaRepository;
-import simplex.bn25.centmerci.server.entity.ScheduleDraft;
-
-public interface ScheduleDraftRepository extends JpaRepository<ScheduleDraft, Long> {
-}
-
-===== backend/entity/ScheduleDraft.java =====
-package simplex.bn25.centmerci.server.entity;
-
-import jakarta.persistence.*;
-import lombok.Data;
-import lombok.NoArgsConstructor;
-import lombok.AllArgsConstructor;
-import java.time.LocalDateTime;
-
+// ✅ ScheduleDraft.java
 @Entity
-@Table(name = "schedule_draft")
+@Table(name = "schedules_draft")
 @Data
 @NoArgsConstructor
-@AllArgsConstructor 
+@AllArgsConstructor
 public class ScheduleDraft {
-
     @Id
     @GeneratedValue(strategy = GenerationType.IDENTITY)
-    private Long id; 
+    private Long id;
 
-    @Column(name = "groups_name")
-    private String groupsName; 
-
-    @Column(name = "departments_name")
-    private String departmentsName; 
-
-    @Column(name = "lecturers_name")
-    private String lecturersName; 
-
-    @Column(name = "curriculums_name", nullable = false) 
+    private String groupsName;
+    private String departmentsName;
+    private String lecturersName;
     private String curriculumsName;
+    private String roomsName;
+    private String categoriesName;
+    private String backgroundColor;
 
-    @Column(name = "rooms_name")
-    private String roomsName; 
+    private LocalDateTime startDatetime;
+    private LocalDateTime endDatetime;
+    private LocalDateTime createdDatetime;
+}
 
-    @Column(name = "categories_name", nullable = false)
-    private String categoriesName; 
+// ✅ ScheduleDraftRepository.java
+public interface ScheduleDraftRepository extends JpaRepository<ScheduleDraft, Long> {}
 
-    @Column(name = "background_color", nullable = false)
-    private String backgroundColor; 
+// ✅ ScheduleDraftController.java
+@RestController
+@RequestMapping("/api/schedules/draft")
+@CrossOrigin
+public class ScheduleDraftController {
+    private final ScheduleDraftRepository repository;
 
-    @Column(name = "start_datetime", nullable = false) 
-    private LocalDateTime startDateTime; 
+    public ScheduleDraftController(ScheduleDraftRepository repository) {
+        this.repository = repository;
+    }
 
-    @Column(name = "end_datetime", nullable = false) 
-    private LocalDateTime endDateTime; 
+    @GetMapping
+    public List<ScheduleDraft> getAll() {
+        return repository.findAll();
+    }
 
-    @Column(name = "created_datetime", nullable = false, updatable = false) 
-    private LocalDateTime createdDateTime = LocalDateTime.now();
+    @DeleteMapping("/all")
+    public void deleteAll() {
+        repository.deleteAll();
+    }
+
+    @PostMapping("/bulk")
+    public void saveAll(@RequestBody List<ScheduleDraft> drafts) {
+        repository.saveAll(drafts);
+    }
 }
 
