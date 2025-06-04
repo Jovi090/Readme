@@ -1,3 +1,51 @@
+import React, { useEffect, useState } from 'react';
+import FullCalendar from '@fullcalendar/react';
+import timelinePlugin from '@fullcalendar/timeline';
+import jaLocale from '@fullcalendar/core/locales/ja';
+import { EventInput } from '@fullcalendar/core';
+
+const HolidayTimeline: React.FC = () => {
+  const [holidayEvents, setHolidayEvents] = useState<EventInput[]>([]);
+
+  useEffect(() => {
+    const fetchHolidays = async () => {
+      try {
+        const response = await fetch('https://holidays-jp.github.io/api/v1/date.json');
+        const data: Record<string, string> = await response.json();
+
+        const formatted: EventInput[] = Object.entries(data).map(([date, name]) => ({
+          start: date,
+          display: 'background',
+          backgroundColor: 'red',
+          title: name
+        }));
+
+        setHolidayEvents(formatted);
+      } catch (err) {
+        console.error('祝日API取得失败:', err);
+      }
+    };
+
+    fetchHolidays();
+  }, []);
+
+  return (
+    <div>
+      <FullCalendar
+        plugins={[timelinePlugin]}
+        initialView="timelineMonth" // 或 "timelineDay"
+        locale={jaLocale}
+        events={holidayEvents}
+        height="auto"
+        slotDuration="24:00:00"
+      />
+    </div>
+  );
+};
+
+export default HolidayTimeline;
+
+
 import { getHolidaysOf } from 'japanese-holidays';
 
 const [holidayMap, setHolidayMap] = useState<Record<string, string>>({});
