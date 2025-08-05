@@ -8,7 +8,6 @@
 ## 1. このメモの目的
 
 このメモは、JobCenter サーバ（MGサーバ／APPサーバ）の移行において、インストール作業の初期構築フェーズを自動化することを目的とする。  
-特に、UserData（EC2初回起動時の自動スクリプト）を活用し、JobCenterのインストール作業（LicenseManager / CL/Win / SV/MG）を自動できるように作成されている。
 
 ## 2. MG/APPサーバの構築手順
 
@@ -34,7 +33,7 @@
 ⑥ Back系ソースコードの配置
 ```
 
-## ①EC2新規構築（略）
+## EC2新規構築（①）略
 - OS設定
 - AWSCLIのインストール
 
@@ -49,7 +48,7 @@
 - 以下の機能を自動インストールする
     - LicenseManager
     - CL/Win（MGサーバの場合）
-    - SV/MG
+    - MG/SV
 
 
 ### スクリプト
@@ -192,7 +191,7 @@ Start-Service -Name "jobcenter"
 ※ルールファイルには、ノード名、IPアドレス、ホスト名の変更を記述している。
 ※本メモ隣のルールファイル例を参照すること
 - ルールファイルを用いての.jpfファイルの編集
-- obCenterの停止（リストア前に必要）
+- JobCenterの停止（リストア前に必要）
 - 変換済み構成情報のリストア
 
 ### スクリプト
@@ -209,8 +208,8 @@ $jcBin = "D:\JobCenter\SV\bin"
 #jdh_upload 実行
 & "$jcBin\jdh_upload" -r $ruleFilePath
 ```
-
-
+---
+```
 ※コマンド全利用可能なパラメータ（移行ガイド240ページ）：
 %InstallDirectory%\bin\jdh_upload [-h %hostname%[:%port%]] [-u %user%] [-
 p %password%] [-c] [-r %rulefile%] [-f] [-i] [-w %second%] {%jpf_file%|-a
@@ -238,7 +237,5 @@ p %password%] [-c] [-r %rulefile%] [-f] [-i] [-w %second%] {%jpf_file%|-a
 -a %jpf_dir% 指定されたディレクトリ(%jpf_dir%)内のjpfファイルをすべてアップロード
 する。全ユーザダウンロードで生成したディレクトリを指定してくださ
 い。
-
-```
 
 ```
