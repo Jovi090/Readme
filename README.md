@@ -1,3 +1,9 @@
+reg query HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU /v UseWUServer
+reg query HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate /v WUServer
+
+reg add HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU /v UseWUServer /t REG_DWORD /d 0 /f
+net stop wuauserv & net start wuauserv
+
 皆さん、こんにちは。画面は見えていますでしょうか？
 
 それでは、インフラチームのスプリントレビューの発表を始めます。
