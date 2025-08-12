@@ -1,3 +1,6 @@
+Invoke-WebRequest -Uri https://www.update.microsoft.com -UseBasicParsing
+
+
 reg query HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate\AU /v UseWUServer
 reg query HKLM\SOFTWARE\Policies\Microsoft\Windows\WindowsUpdate /v WUServer
 
