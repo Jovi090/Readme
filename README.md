@@ -1,3 +1,64 @@
+https://docs.aws.amazon.com/zh_cn/AWSEC2/latest/UserGuide/ec2launch-v2.html
+
+
+
+1. なぜ最後に再起動を入れても UserData 全体が正常に実行されない場合があるのか（根本原因）
+
+EC2Launch v2 の初期化ステージ順序（YAML v1.1 新版）
+	1.	Boot – システム起動初期の処理（例: システムディスクの拡張）
+	2.	Network – ネットワーク設定、通信可能化
+	3.	PreReady – Windows 設定の適用（ライセンス認証、DNS サフィックス、ローカル管理者設定など）
+	4.	UserData（YAML v1.1 新版 / XML） – カスタムスクリプト（PowerShell/XML）の実行
+	5.	PostReady – 追加の初期化サービス起動（例: SSM Agent、その他のバックグラウンドタスク）
+
+新しい Windows AMI はデフォルトで EC2Launch v2 + YAML v1.1 を使用しており、UserData は PostReady の前に実行されます。つまり、スクリプト終了後にも EC2 初期化エージェントは PostReady ステージの処理を控えています。
+
+⸻
+
+なぜ最後の行で再起動しても問題になるのか
+	1.	PowerShell の逐次実行 = システムタスクの完全完了ではない
+	•	スクリプトは順番に実行されますが、例えばドメイン参加、サービス起動、レジストリ書き込みなどはコード行が終わっても、バックグラウンドで書き込みやサービス登録、ポリシー同期が続いています。
+	2.	即時再起動はシステムレベルの強制終了を引き起こす
+	•	Restart-Computer や shutdown /r /t 0 を実行すると、Windows はすぐにシャットダウンイベントをブロードキャストし、サービス停止 → 全プロセス終了（スクリプトの PowerShell や親プロセスである EC2Launch v2 も含む）を行います。
+	•	このため、まだ完了していないバックグラウンド処理が中断されるだけでなく、PostReady ステージの処理も実行されなくなります。例えば：
+	•	SSM Agent の初期化と登録
+	•	その他のシステムや AWS サービスの起動設定
+	•	ログ書き込みや状態レポート
+
+⸻
+
+根本原因まとめ
+	•	スクリプトの実行順序は PowerShell 内での順序に過ぎず、システムレベルのタスクやバックグラウンド処理がすべて完了している保証はありません。
+	•	即時再起動コマンドは EC2Launch v2 をも終了させ、残りの初期化ステージ（PostReady）が実行されません。
+	•	そのため、UserData の最後に再起動を書いても、前に起動した処理や後続の初期化タスクが両方とも失敗する可能性があります。
+
+
+非同期で安全に再起動する考え方
+	•	ねらい：UserData の PowerShell を早く終了させ、EC2Launch v2 が収尾（PostReady 等）を続けられる状態にしてから、OS 側で後から再起動させる。
+	•	方法：
+shutdown /r /t <秒> … OS に「○秒後に再起動してね」と予約だけ渡して、即終了
+
+例（PowerShell／UserData の最後に置く）
+
+# 5分後に再起動を予約（即終了）
+shutdown /r /t 300 /c "Reboot after userdata finished"
+
+
+⸻
+
+なぜ Sleep はダメで、/t が有効なのか（直感的な説明）
+	•	Sleep の場合
+	•	PowerShell（UserData）は Start-Sleep 300 などでずっと止まっている
+	•	**EC2Launch v2 は「まだスクリプト実行中だから待つね（＝ブロック）」**という状態
+	•	Sleep が終わって Restart-Computer を実行した瞬間、OS は即座にシャットダウンシーケンスに入り、PowerShell と EC2Launch v2 をまとめて終了
+	•	結果：「長時間待たせたあげく、やっと収尾に入ろうとした EC2Launch が Restart で殺される」 → 初期化の残処理やバックグラウンドの書き込み等が未完になりやすい
+	•	shutdown /r /t N の場合
+	•	ボールを先に投げるイメージ：OS に「N 秒後に再起動して」と依頼 → コマンドは即終了
+	•	PowerShell はすぐ終わる → **EC2Launch v2 は「もう終わった？OK、収尾を続けるね」**と進められる
+	•	再起動のカウントダウンは OS が裏で単独管理。EC2Launch v2 の収尾や、前段でトリガーしたバックグラウンド処理が猶予内に完了しやすい
+	•	時間が来たら OS が再起動するが、その頃には初期化の収尾が終わっており、中断リスクが低い
+
+
 Invoke-WebRequest -Uri https://www.update.microsoft.com -UseBasicParsing
 
 
