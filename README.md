@@ -1,5 +1,10 @@
 https://docs.aws.amazon.com/zh_cn/AWSEC2/latest/UserGuide/ec2launch-v2.html
-
+# 最近一天（24小时）针对某实例的会话
+aws ssm describe-sessions \
+  --state History \
+  --filters "key=Target,value=i-0123456789abcdef0" \
+            "key=InvokedAfter,value=$(date -u -d '1 day ago' +%Y-%m-%dT%H:%M:%SZ)" \
+  --query "Sessions[?DocumentName=='AWS-StartPortForwardingSession'].{SessionId:SessionId,Owner:Owner,Start:StartDate,End:EndDate,Status:Status}"
 
 
 1. なぜ最後に再起動を入れても UserData 全体が正常に実行されない場合があるのか（根本原因）
