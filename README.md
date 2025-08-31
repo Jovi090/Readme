@@ -1,3 +1,12 @@
+$log = "C:\ProgramData\Amazon\SSM\Logs\amazon-ssm-agent.log"
+
+Get-Content $log -Tail 2000 |
+  Select-String -Pattern "connect" |
+  Select-Object -Last 10
+
+出力に表示される接続先が vpce-xxxx...amazonaws.com であることを確認する
+
+
 https://docs.aws.amazon.com/zh_cn/AWSEC2/latest/UserGuide/ec2launch-v2.html
 # 最近一天（24小时）针对某实例的会话
 aws ssm describe-sessions \
