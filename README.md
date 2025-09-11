@@ -1,3 +1,15 @@
+
+HOST="your-redis-endpoint.cache.amazonaws.com"
+PORT=6379
+AUTH=""   # 如果有密码就填
+
+# Engine Log：制造一个错误命令
+redis-cli -h $HOST -p $PORT -a "$AUTH" FOO || true
+
+# Slow Log：执行一个会超过 10ms 的脚本
+redis-cli -h $HOST -p $PORT -a "$AUTH" \
+  EVAL "local s=0; for i=1,8000000 do s=s+i end; return s" 0
+
 $log = "C:\ProgramData\Amazon\SSM\Logs\amazon-ssm-agent.log"
 
 Get-Content $log -Tail 2000 |
