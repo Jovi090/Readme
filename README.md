@@ -1,3 +1,7 @@
+Start-Process msiexec.exe -ArgumentList '/i "C:\Windows\Temp\package.msi" /qn /norestart /L*v "C:\Windows\Temp\install.log"' -Wait
+
+
+
 皆さん、連絡が遅くなってすみません。
 TechDayの新人セッションについて、会話ベースで以下を確認したいと思っています：
 	1.	発表形式（準備した内容を発表する／自由対話）
