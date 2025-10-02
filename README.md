@@ -1,3 +1,25 @@
+ENDPOINT="<your-elasticache-endpoint>"
+PORT=6379
+
+echo "1) slowlog の閾値を一時的に 1 µs に変更"
+redis-cli -h $ENDPOINT -p $PORT CONFIG SET slowlog-log-slower-than 1
+
+echo "2) 遅いクエリを発生させる (DEBUG SLEEP 1)"
+redis-cli -h $ENDPOINT -p $PORT DEBUG SLEEP 1
+
+echo "3) slowlog の記録を確認"
+redis-cli -h $ENDPOINT -p $PORT SLOWLOG GET 5
+
+echo "4) Engine log エラーを発生させる (FOOBAR)"
+redis-cli -h $ENDPOINT -p $PORT FOOBAR || true
+
+echo "5) slowlog の閾値をデフォルト (10000 µs = 10ms) に戻す"
+redis-cli -h $ENDPOINT -p $PORT CONFIG SET slowlog-log-slower-than 10000
+
+echo "6) 閾値が戻ったことを確認"
+redis-cli -h $ENDPOINT -p $PORT CONFIG GET slowlog-log-slower-than
+
+
 Start-Process msiexec.exe -ArgumentList '/i "C:\Windows\Temp\package.msi" /qn /norestart /L*v "C:\Windows\Temp\install.log"' -Wait
 
 
