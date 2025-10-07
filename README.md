@@ -1,3 +1,8 @@
+Remove-Computer -UnjoinDomainCredential "AWS-PVT.IT\webadmin" -Force
+Add-Computer -WorkGroup "WORKGROUP"
+Restart-Computer -Force
+
+
 ENDPOINT="<your-elasticache-endpoint>"
 PORT=6379
 
