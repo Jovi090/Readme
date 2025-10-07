@@ -1,3 +1,14 @@
+# ===== 非交互切到 WORKGROUP，清掉域成员状态 =====
+$ErrorActionPreference = 'Stop'
+# 有些环境中直接切组即可，不必先 Remove-Computer
+Add-Computer -WorkGroup 'WORKGROUP' -Force -ErrorAction Stop -Confirm:$false
+Restart-Computer -Force
+
+
+这个就可以吗（机器已经被ad删掉）
+
+
+
 Remove-Computer -UnjoinDomainCredential "AWS-PVT.IT\webadmin" -Force
 Add-Computer -WorkGroup "WORKGROUP"
 Restart-Computer -Force
