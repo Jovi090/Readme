@@ -1,4 +1,15 @@
+$ComputerName = "你的电脑名"
+Get-ADReplicationAttributeMetadata -Object (Get-ADComputer $ComputerName) -Server (Get-ADDomainController -Discover).Name | 
+    Where-Object {$_.AttributeName -eq 'unicodePwd'} | 
+    Format-List AttributeName,LastOriginatingChangeTime,OriginatingServer
+
+
+
+
 非常好，这一段文字已经非常真诚、具体了。
+
+
+
 我帮你把它整理成一份自然、正式、但依然保持你原本语气的日语总结文。
 语气参考你的第二张截图（带有反思与成长要素的“自己アピールポイント”文体），
 不会改动内容本质，也不会“造假”或拔高。
