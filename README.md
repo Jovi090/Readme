@@ -3,6 +3,10 @@
 	3.	Kerberos (KDC) は常に AD の unicodePwd を参照しているため、
 旧 Secure Channel 上での通信を「不正」と判定する。
 
+	1.	Netlogon が旧パスワードで Secure Channel を張った状態で、新パスワードを DC に登録。
+	2.	DC 上の AD データベースの unicodePwd は新しいものに変わる。
+	3.	Kerberos (KDC) は常に AD の unicodePwd を参照しているため、
+旧 Secure Channel 上での通信を「不正」と判定する。
 
 
 
